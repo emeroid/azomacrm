@@ -20,7 +20,7 @@ return new class extends Migration
             $table->boolean('is_required')->default(false);
             $table->json('properties')->nullable(); // JSON containing field-specific properties
             $table->integer('order')->default(0);
-            $table->timestamps();
+            $table->timestamps(); 
         });
     }
 
