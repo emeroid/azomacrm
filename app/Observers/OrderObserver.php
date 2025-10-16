@@ -1,0 +1,54 @@
+<?php
+
+namespace App\Observers;
+
+use App\Events\OrderAssigned;
+use App\Events\OrderPlaced;
+use App\Models\Order;
+
+class OrderObserver
+{
+    /**
+     * Handle the Order "created" event.
+     */
+    public function created(Order $order): void
+    {
+        OrderPlaced::dispatch($order);
+
+        if(isset($order->call_agent_id) && !is_null($order->call_agent_id)) {
+            OrderAssigned::dispatch($order);
+        }
+    }
+
+    /**
+     * Handle the Order "updated" event.
+     */
+    public function updated(Order $order): void
+    {
+        //
+    }
+
+    /**
+     * Handle the Order "deleted" event.
+     */
+    public function deleted(Order $order): void
+    {
+        //
+    }
+
+    /**
+     * Handle the Order "restored" event.
+     */
+    public function restored(Order $order): void
+    {
+        //
+    }
+
+    /**
+     * Handle the Order "force deleted" event.
+     */
+    public function forceDeleted(Order $order): void
+    {
+        //
+    }
+}
