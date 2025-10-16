@@ -51,8 +51,8 @@ class MessageSchedulerController extends Controller
             $rules['status'] = 'nullable|required_if:order_criteria_type,STATUS|in:' . implode(',', array_keys(Order::getStatuses()));
             
             $targetCriteria = $request->input('order_criteria_type') === 'ALL' 
-                ? ['type' => 'ALL'] 
-                : ['type' => 'STATUS', 'status' => $request->input('status')];
+                ? ['type' => 'ALL']
+                : ['type' => 'STATUS', 'status' => $request->input('status'), 'order_id' => $request->input('order_id')];
             
             $actionType = Order::class;
             
@@ -97,9 +97,8 @@ class MessageSchedulerController extends Controller
             'target_criteria' => $targetCriteria, // Target criteria now includes whatsapp_field_name
             'message' => $validated['message'],
             'send_at' => $validated['send_at'],
-            'sent_count' => 0,
-            'failed_count' => 0
-
+            'sent_count' => 0, // Will be gotten dynamically
+            'failed_count' => 0 // Will be gotten dynamically
         ]);
 
         return redirect()->route('scheduler.index')->with('success', 'Message scheduled successfully!');

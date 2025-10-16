@@ -62,7 +62,7 @@ class OrderCommunicationController extends Controller
                 $query->where('status', $request->status);
             }
         
-            $orders = $query->paginate(20);
+            $orders = $query->paginate(2);
         }
     
         // Get outcomes - default + user specific
@@ -114,7 +114,7 @@ class OrderCommunicationController extends Controller
             $query->where('status', $request->status);
         }
 
-        $orders = $query->paginate(20);
+        $orders = $query->paginate(2);
 
         return response()->json([
             'orders' => [

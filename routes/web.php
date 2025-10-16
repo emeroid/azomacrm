@@ -68,10 +68,11 @@ Route::middleware('auth')->group(function () {
 
     // This creates routes for index, create, and destroy
     Route::resource('devices', WhatsAppDeviceController::class)->only([
-        'index', 'create', 'destroy'
+        'index', 'destroy'
     ]);
 
-    Route::get('/devices/{sessionId}/status', [WhatsAppDeviceController::class, 'getDeviceStatus'])->name('devices.status.poll');
+    Route::get('/devices/link', [WhatsAppDeviceController::class, 'startSession'])->name('devices.start'); // New route for starting the process
+    Route::get('/devices/{sessionId}/status', [WhatsAppDeviceController::class, 'showStatus'])->name('devices.status');
 });
 
 // Form Templates Routes

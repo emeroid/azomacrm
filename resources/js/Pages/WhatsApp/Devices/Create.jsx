@@ -1,7 +1,7 @@
 // resources/js/Pages/Devices/Create.jsx
 import React, { useEffect, useState } from 'react';
 import { Head, router, Link } from '@inertiajs/react';
-import AuthenticatedLayout from '@/Layouts/WaAuthLayout';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 
 export default function Create({ auth, sessionId, device }) {
     
@@ -16,36 +16,35 @@ export default function Create({ auth, sessionId, device }) {
     
     // Polling logic
     useEffect(() => {
+        // 1. Check for success condition *before* setting the interval
         if (currentDevice && currentDevice.status === 'connected') {
             router.visit(route('devices.index'), {
                 with: { success: 'Device connected successfully!' }
             });
             return;
         }
-
+        
+        // 2. ONLY start the interval if the device is not connected.
+        // Also, it's better to avoid polling if the device object isn't available yet, 
+        // though with the new controller logic it should always be.
         const interval = setInterval(() => {
             setPollingCount(prev => prev + 1);
+            
+            // 3. Use router.reload() without arguments to hit the current page/route 
+            // (which is now the dedicated 'devices.status' route).
             router.reload({
-                only: ['device'],
+                only: ['device'], // This is fine for partial reloads
                 preserveScroll: true,
-                onSuccess: (page) => {
-                    const newDeviceData = page.props.device;
-                    if (newDeviceData && newDeviceData.status === 'connected') {
-                        clearInterval(interval);
-                        router.visit(route('devices.index'), {
-                            with: { success: 'Device connected successfully!' }
-                        });
-                    }
-                },
-                onError: () => {
-                    console.error("Polling failed.");
-                    clearInterval(interval);
-                }
+                // The onSuccess/onError logic is now cleaner as it relies on the new `device` prop 
+                // coming back from the dedicated `showStatus` method.
             });
+            
         }, 3000);
 
+        // 4. Cleanup function to stop polling when the component unmounts or dependencies change.
         return () => clearInterval(interval);
-    }, [sessionId, currentDevice]);
+        
+    }, [currentDevice]);
 
     const statusConfig = {
         'pending-qr': {
@@ -54,7 +53,7 @@ export default function Create({ auth, sessionId, device }) {
             color: 'border-yellow-500',
             progress: 25
         },
-        'qr-received': {
+        'scanning': {
             message: 'QR code generated. Please scan it with your phone.',
             icon: '📱',
             color: 'border-blue-500',

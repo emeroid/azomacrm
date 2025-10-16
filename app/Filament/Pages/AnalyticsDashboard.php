@@ -12,14 +12,12 @@ use App\Filament\Widgets\OrdersChartWidget;
 use App\Filament\Widgets\RevenueOrdersChartWidget;
 use App\Filament\Widgets\RtoChartWidget;
 use App\Filament\Widgets\StateOrdersChartWidget;
-use Filament\Pages\Page;
+use Filament\Pages\Dashboard as BaseDashboard;
 
-class AnalyticsDashboard extends Page
+class AnalyticsDashboard extends BaseDashboard
 {
     protected static ?string $navigationIcon = 'heroicon-o-chart-bar';
     protected static string $view = 'filament.pages.analytics-dashboard';
-    protected static ?string $navigationGroup = 'Analytics';
-    protected static ?int $navigationSort = 1;
 
     protected function getHeaderWidgets(): array
     {

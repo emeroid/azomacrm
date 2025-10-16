@@ -37,7 +37,6 @@ class ProcessScheduledMessages extends Command
             
             $potentialRecipients = [];
             
-            // --- Logic for ORDER (Ambiguous Fields) ---
             if ($message->action_type === Order::class) {
                 $query = Order::query();
                 $criteria = $message->target_criteria;
@@ -83,11 +82,16 @@ class ProcessScheduledMessages extends Command
                 // CRUCIAL: The SendWhatsappBroadcast job (or a service it uses)
                 // MUST contain logic to hit your gateway's "check number" API
                 // before actually sending, to prevent wasting credits/time on invalid numbers.
-                
+                $delaySeconds = 30;
                 \App\Jobs\DispatchWhatsappBroadcast::dispatch(
-                    $message->device->session_id, 
-                    $recipients, // Send the list of potential recipients
-                    $message->message
+                    $message->device->session_id,
+                    $recipients, // Send the list of potential 
+                    $message->message,
+                    $delaySeconds,              // 4th Arg: delaySeconds (Required)
+                    null,                       // 5th Arg: campaignId (Not Applicable)
+                    $message->id,               // 6th Arg: scheduledMessageId (CRUCIAL)
+                    null
+
                 );
             }
 

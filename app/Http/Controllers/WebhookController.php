@@ -19,8 +19,10 @@ class WebhookController extends Controller
     {
         $validated = $request->validate([
             'sessionId' => 'required|string|exists:whatsapp_devices,session_id',
-            'qrCodeUrl' => 'nullable|url',
+            'qrCodeUrl' => 'nullable',
         ]);
+
+        Log::info("QR Code request for session: {$validated['sessionId']}");
 
         $device = WhatsappDevice::where('session_id', $validated['sessionId'])->first();
 
