@@ -1,7 +1,7 @@
 // resources/js/Pages/Devices/Create.jsx
 import React, { useEffect, useState } from 'react';
 import { Head, router, Link } from '@inertiajs/react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import AuthenticatedLayout from '@/Layouts/WaAuthLayout';
 
 export default function Create({ auth, sessionId, device }) {
     

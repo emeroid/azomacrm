@@ -79,10 +79,10 @@ export default function AnalyticsIndex({ auth, scheduledData, responderData, cam
                             View Scheduler
                         </Link>
                         <Link 
-                            href={route('campaigns.create')} 
+                            href={route('devices.index')} 
                             className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                         >
-                            New Campaign
+                            View Devices
                         </Link>
                     </div>
                 </div>

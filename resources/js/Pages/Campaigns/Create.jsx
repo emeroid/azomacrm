@@ -1,7 +1,7 @@
 // resources/js/Pages/Campaigns/Create.jsx
 import React, { useState } from 'react';
 import { Head, useForm, Link } from '@inertiajs/react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import AuthenticatedLayout from '@/Layouts/WaAuthLayout';
 
 export default function CreateCampaign({ auth, devices, campaigns }) {
     const [activeStep, setActiveStep] = useState(1);

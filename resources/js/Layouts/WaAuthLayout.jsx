@@ -58,8 +58,8 @@ export default function AuthenticatedLayout({ auth, header, children }) {
 
                             {/* Desktop navigation */}
                             <div className="hidden sm:ml-4 sm:flex sm:space-x-4">
-                                <NavLink href={route('analytics.index')} active={route().current('analytics.index')}>
-                                    WhatsApp Analytics
+                                <NavLink href={route('devices.index')} active={route().current('analytics.index')}>
+                                    WhatsApp Devices
                                 </NavLink>
                             </div>
                         </div>
