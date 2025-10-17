@@ -282,7 +282,7 @@ export default function Index({ auth, devices }) {
                                         }
                                     </p>
                                     <Link 
-                                        href={route('devices.create')} 
+                                        href={route('devices.start')} 
                                         className="px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors inline-flex items-center space-x-2"
                                     >
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
