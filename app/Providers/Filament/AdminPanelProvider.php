@@ -70,6 +70,14 @@ class AdminPanelProvider extends PanelProvider
                     ->visible(function() {
                         return (request()->user()->role === Role::CALL_AGENT->value) || (request()->user()->is_admin);
                     }),// optional
+
+                NavigationItem::make('WA Campaign')
+                    ->url('/devices')
+                    ->icon('heroicon-o-link') // optional
+                    ->openUrlInNewTab()
+                    ->visible(function() {
+                        return (request()->user()->role === Role::MARKETER->value) || (request()->user()->is_admin);
+                    }),// optional
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
             ->widgets([

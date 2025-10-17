@@ -13,13 +13,19 @@ git pull origin $BRANCH
 composer install --no-dev --prefer-dist --optimize-autoloader
 
 # migrate and caches
-$PHP artisan migrate --force
-$PHP artisan config:cache
-$PHP artisan route:cache
-$PHP artisan view:cache
+php artisan migrate --force
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
 
 # tell horizon to gracefully restart so new code is used
-$PHP artisan horizon:terminate
+php artisan horizon:terminate
+
+# install node dependencies for react/inertia
+npm ci || npm install
+
+# run build
+npm run build
 
 # reload services
 systemctl reload php8.3-fpm || true

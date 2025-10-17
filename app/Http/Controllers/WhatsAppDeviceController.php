@@ -67,6 +67,19 @@ class WhatsAppDeviceController extends Controller
         ]);
     }
 
+
+    public function renameDevice(Request $request, WhatsappDevice $device)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string'
+        ]);
+
+        $device->name = $validated['name'];
+        $device->save();
+
+        return redirect()->back()->with('success', 'Device Name updated successfully');
+    }
+
     protected function wormServer($sessionId) {
         $gatewayUrl = config('services.whatsapp.gateway_url');
         return Http::post("{$gatewayUrl}/sessions/start", ['sessionId' => $sessionId]);
