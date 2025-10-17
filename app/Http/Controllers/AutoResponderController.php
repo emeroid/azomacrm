@@ -21,6 +21,8 @@ class AutoResponderController extends Controller
             'keyword' => 'required|string|max:255|unique:auto_responders,keyword,NULL,id,user_id,'.auth()->id(),
             'response_message' => 'required|string',
         ]);
+        
+        $validated['hit_count'] = 0;
 
         auth()->user()->autoResponders()->create($validated);
 
