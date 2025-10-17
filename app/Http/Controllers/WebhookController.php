@@ -211,21 +211,7 @@ class WebhookController extends Controller
 
     /**
      * Helper function to send a reply via the gateway.
-     */
-    // private function sendReply(string $sessionId, string $to, string $message, ?int $autoResponderLogId = null): void
-    // {
-    //     $recipient = str_replace('@c.us', '', $to); // Clean the number
-    //     $gatewayUrl = config('services.whatsapp.gateway_url');
-
-    //     // 1. Ping the server connection to ensure the client is loaded/kept alive
-    //     Http::post("{$gatewayUrl}/sessions/start", [
-    //         'sessionId' => $sessionId,
-    //     ])->throw(); // Use throw() to catch connection errors immediately
-
-    //     // 2. Dispatch the actual message sending job
-    //     SendWhatsappBroadcast::dispatch($sessionId, [$recipient], $message, 3, null, $autoResponderLogId);
-    // }
-
+    */
     private function sendReply(string $sessionId, string $to, string $message, ?int $autoResponderLogId = null): void
     {
         $recipient = str_replace('@c.us', '', $to);
