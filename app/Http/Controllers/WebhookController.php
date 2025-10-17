@@ -19,7 +19,7 @@ class WebhookController extends Controller
     {
         $validated = $request->validate([
             'sessionId' => 'required|string|exists:whatsapp_devices,session_id',
-            'qrCodeUrl' => 'nullable',
+            'qrCodeUrl' => 'nullable|string',
         ]);
 
         Log::info("QR Code request for session: {$validated['sessionId']}");
@@ -222,11 +222,11 @@ class WebhookController extends Controller
         ])->throw();
 
         // The Job now takes 7 arguments.
-        DispatchWhatsappBroadcast::dispatch(
+        DispatchWhatsappBroadcast::dispatchSync(
             $sessionId, 
             [$recipient], 
             $message, 
-            3,          // Delay in seconds (4th arg)
+            50,          // Delay in seconds (4th arg)
             null,       // Campaign ID (5th arg) - Not applicable here
             null,       // Scheduled Message ID (6th arg) - Not applicable here
             $autoResponderLogId // Auto Responder Log ID (7th arg) - Applicable
