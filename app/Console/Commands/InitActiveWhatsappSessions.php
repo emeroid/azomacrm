@@ -53,7 +53,8 @@ class InitActiveWhatsappSessions extends Command
             try {
                 // Hitting the POST /sessions/start endpoint will force the Node.js gateway
                 // to spin up the Puppeteer instance for this specific session.
-                Http::timeout(10)->post("{$gatewayUrl}/sessions/start", [
+                Http::withHeaders(['X-API-KEY' => config('services.whatsapp.api_key')])
+                      ->timeout(10)->post("{$gatewayUrl}/sessions/start", [
                     'sessionId' => $sessionId,
                 ])->throw(); // Use throw() to handle HTTP errors
 
