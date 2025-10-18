@@ -18,6 +18,7 @@ class SendSingleWhatsappMessage implements ShouldQueue
     protected string $sessionId;
     protected string $phoneNumber;
     protected string $message;
+    protected int $userId;
     protected ?int $campaignId;
     protected ?int $scheduledMessageId;
     protected ?int $autoResponderLogId;
@@ -31,6 +32,7 @@ class SendSingleWhatsappMessage implements ShouldQueue
         string $sessionId, 
         string $phoneNumber, 
         string $message, 
+        int $userId,
         ?int $campaignId,
         ?int $scheduledMessageId,
         ?int $autoResponderLogId
@@ -39,6 +41,7 @@ class SendSingleWhatsappMessage implements ShouldQueue
         $this->sessionId = $sessionId;
         $this->phoneNumber = $phoneNumber;
         $this->message = $message;
+        $this->userId = $userId;
         $this->campaignId = $campaignId;
         $this->scheduledMessageId = $scheduledMessageId;
         $this->autoResponderLogId = $autoResponderLogId;
@@ -50,64 +53,85 @@ class SendSingleWhatsappMessage implements ShouldQueue
     public function handle(): void
     {
         // For simplicity, we assume we can infer the user ID or that it's handled upstream.
-        $userId = auth()->id() ?? MessageLog::getUserFromSessionId($this->sessionId);
+        $log = MessageLog::create([
+                'user_id' => $this->userId,
+                'message_id' => 'temp-' . \Illuminate\Support\Str::uuid(),
+                'session_id' => $this->sessionId,
+                'recipient_number' => $this->phoneNumber,
+                'message' => $this->message,
+                'status' => 'processing',
+                'sent_at' => null,
+                'campaign_id' => $this->campaignId,
+                'scheduled_message_id' => $this->scheduledMessageId,
+                'auto_responder_log_id' => $this->autoResponderLogId,
+            ]);
 
         try {
-            $response = Http::timeout(self::HTTP_TIMEOUT_SECONDS)
-                 ->post(config('services.whatsapp.gateway_url') . '/messages/send', [
+
+            $response = Http::timeout(90)
+                // NEW: Add the required API Key for security
+                ->withHeaders(['X-API-KEY' => config('services.whatsapp.api_key')])
+                ->post(config('services.whatsapp.gateway_url') . '/messages/send', [
                     'sessionId' => $this->sessionId,
                     'to' => $this->phoneNumber,
                     'message' => $this->message,
-            ]);
+                ]);
 
             $data = $response->json();
 
-            if ($response->successful() && isset($data['success']) && $data['success'] && isset($data['id'])) {
-                MessageLog::create([
-                    'user_id' => $userId,
+            if ($response->successful() && $data['success']) {
+                // STEP 2: Update the log with the real message ID from the gateway.
+                // The status is 'queued' because the gateway has accepted it.
+                // The webhook will later update it to 'sent', 'delivered', etc.
+                $log->update([
                     'message_id' => $data['id'],
-                    'session_id' => $this->sessionId,
-                    'recipient_number' => $this->phoneNumber,
-                    'message' => $this->message,
                     'status' => 'queued',
-                    'sent_at' => null,
-                    'campaign_id' => $this->campaignId,
-                    'scheduled_message_id' => $this->scheduledMessageId,
-                    'auto_responder_log_id' => $this->autoResponderLogId,
                 ]);
-                Log::info("Message logged successfully for {$this->phoneNumber}. ID: {$data['id']}");
             } else {
-                $errorDetails = $data['error'] ?? 'Unknown gateway error.';
-                Log::error("Failed to send message to {$this->phoneNumber} via gateway: {$errorDetails}");
-                $this->createFailedMessageLog();
-                $this->updateParentFailureCount();
+                // Throw an exception to trigger Laravel's retry mechanism
+                throw new \Exception('Gateway failed to send message: ' . ($data['error'] ?? 'Unknown error'));
             }
+
+            // $response = Http::timeout(self::HTTP_TIMEOUT_SECONDS)
+            //      ->post(config('services.whatsapp.gateway_url') . '/messages/send', [
+            //         'sessionId' => $this->sessionId,
+            //         'to' => $this->phoneNumber,
+            //         'message' => $this->message,
+            // ]);
+
+            // $data = $response->json();
+
+            // if ($response->successful() && isset($data['success']) && $data['success'] && isset($data['id'])) {
+            //     MessageLog::create([
+            //         'user_id' => $this->userId,
+            //         'message_id' => $data['id'],
+            //         'session_id' => $this->sessionId,
+            //         'recipient_number' => $this->phoneNumber,
+            //         'message' => $this->message,
+            //         'status' => 'queued',
+            //         'sent_at' => null,
+            //         'campaign_id' => $this->campaignId,
+            //         'scheduled_message_id' => $this->scheduledMessageId,
+            //         'auto_responder_log_id' => $this->autoResponderLogId,
+            //     ]);
+            //     Log::info("Message logged successfully for {$this->phoneNumber}. ID: {$data['id']}");
+            // } else {
+            //     $errorDetails = $data['error'] ?? 'Unknown gateway error.';
+            //     Log::error("Failed to send message to {$this->phoneNumber} via gateway: {$errorDetails}");
+            //     $this->createFailedMessageLog();
+            //     $this->updateParentFailureCount();
+            // }
 
         } catch (\Exception $e) {
             Log::error("HTTP connection failed to gateway for {$this->phoneNumber}: " . $e->getMessage());
-            $this->createFailedMessageLog();
-            $this->updateParentFailureCount();
-        }
-    }
 
-    /**
-     * Creates a MessageLog entry for a failed send attempt.
-     */
-    private function createFailedMessageLog(): void
-    {
-        $userId = auth()->id() ?? MessageLog::getUserFromSessionId($this->sessionId);
-        MessageLog::create([
-            'user_id' => $userId,
-            'message_id' => \Illuminate\Support\Str::uuid(),
-            'session_id' => $this->sessionId,
-            'recipient_number' => $this->phoneNumber,
-            'message' => $this->message,
-            'status' => 'failed',
-            'sent_at' => now(),
-            'campaign_id' => $this->campaignId,
-            'scheduled_message_id' => $this->scheduledMessageId,
-            'auto_responder_log_id' => $this->autoResponderLogId,
-        ]);
+            // STEP 3: If all retries fail, this block will be executed.
+            $log->update(['status' => 'failed']);
+            $this->updateParentFailureCount();
+
+            // Re-throw the exception to mark the job as officially failed.
+            $this->fail($e);
+        }
     }
     
     /**

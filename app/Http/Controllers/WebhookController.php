@@ -102,7 +102,7 @@ class WebhookController extends Controller
         }
         // Find an auto-responder that matches the incoming message
         // This is a more efficient query than your original code
-        $responder = AutoResponder::where('keyword', 'LIKE', '%' . strtolower(trim($validated['body']) . '%' ))
+        $responder = AutoResponder::where('keyword', 'LIKE', strtolower(trim($validated['body']) . '%' ))
             ->where('user_id', $device->user_id) // if responders are user-specific
             ->first();
 
@@ -231,6 +231,28 @@ class WebhookController extends Controller
             null,       // Scheduled Message ID (6th arg) - Not applicable here
             $autoResponderLogId // Auto Responder Log ID (7th arg) - Applicable
         );
+    }
+
+    /**
+     * NEW: Handle the webhook for when a QR scan times out.
+     */
+    public function handleQrTimeout(Request $request)
+    {
+        $validated = $request->validate([
+            'sessionId' => 'required|string|exists:whatsapp_devices,session_id',
+        ]);
+
+        $device = WhatsappDevice::where('session_id', $validated['sessionId'])->first();
+
+        if ($device && $device->status !== 'connected') {
+            $device->update([
+                'status' => 'expired', // New status for the frontend
+                'qr_code_url' => null,
+            ]);
+            Log::warning("QR Scan timed out for session: {$validated['sessionId']}");
+        }
+
+        return response()->json(['status' => 'success']);
     }
 
     /**

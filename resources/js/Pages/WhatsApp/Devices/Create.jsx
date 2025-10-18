@@ -1,51 +1,88 @@
-// resources/js/Pages/Devices/Create.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Head, router, Link } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/WaAuthLayout';
+import axios from 'axios';
 
-export default function Create({ auth, sessionId, device }) {
+export default function Create({ auth, initialDevice, sessionId }) {
     
-    const [currentDevice, setCurrentDevice] = useState(device);
+    const [device, setDevice] = useState(initialDevice);
+    const [status, setStatus] = useState(initialDevice?.status || 'pending-qr');
+    const [qrCodeUrl, setQrCodeUrl] = useState(initialDevice?.qr_code_url || '');
+    const [isRestarting, setIsRestarting] = useState(false);
     const [pollingCount, setPollingCount] = useState(0);
     
-    useEffect(() => {
-        if (device) {
-            setCurrentDevice(device);
-        }
-    }, [device]);
-    
-    // Polling logic
-    useEffect(() => {
-        // 1. Check for success condition *before* setting the interval
-        if (currentDevice && currentDevice.status === 'connected') {
-            router.visit(route('devices.index'), {
-                with: { success: 'Device connected successfully!' }
-            });
-            return;
-        }
-        
-        // 2. ONLY start the interval if the device is not connected.
-        // Also, it's better to avoid polling if the device object isn't available yet, 
-        // though with the new controller logic it should always be.
-        const interval = setInterval(() => {
-            setPollingCount(prev => prev + 1);
-            
-            // 3. Use router.reload() without arguments to hit the current page/route 
-            // (which is now the dedicated 'devices.status' route).
-            router.reload({
-                only: ['device'], // This is fine for partial reloads
-                preserveScroll: true,
-                // The onSuccess/onError logic is now cleaner as it relies on the new `device` prop 
-                // coming back from the dedicated `showStatus` method.
-            });
-            
-        }, 3000);
+    // Use a ref for the interval to prevent issues with stale state in closures
+    const pollingIntervalRef = useRef(null);
 
-        // 4. Cleanup function to stop polling when the component unmounts or dependencies change.
-        return () => clearInterval(interval);
-        
-    }, [currentDevice]);
+    const stopPolling = () => {
+        if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+        }
+    };
 
+    // New function to handle restarting the session
+    const restartSession = () => {
+        setIsRestarting(true);
+        stopPolling();
+        
+        // This call re-triggers the whole process on the backend
+        router.get(route('devices.start'), {}, {
+            onSuccess: () => {
+                // The page will reload via redirect from the controller,
+                // so we don't need to do much here.
+                console.log("Session restart initiated.");
+            },
+            onError: (errors) => {
+                console.error("Failed to restart session:", errors);
+                setStatus('failed');
+                setIsRestarting(false);
+            }
+        });
+    };
+
+    useEffect(() => {
+        const pollStatus = async () => {
+            try {
+                setPollingCount(prev => prev + 1);
+                
+                // NEW: Hitting the lightweight JSON endpoint
+                const response = await axios.get(route('devices.get-status', { sessionId: device?.session_id || sessionId }));
+                const updatedDevice = response.data;
+                
+                setDevice(updatedDevice);
+                setQrCodeUrl(updatedDevice.qr_code_url);
+                setStatus(updatedDevice.status);
+
+            } catch (error) {
+                console.error('Polling failed:', error);
+                setStatus('failed'); // Set a failed state on API error
+            }
+        };
+
+        // Start polling only if the process is not in a final state
+        if (!['connected', 'failed', 'expired', 'disconnected'].includes(status)) {
+            pollingIntervalRef.current = setInterval(pollStatus, 3000);
+        } else {
+            stopPolling();
+        }
+
+        // If connected, redirect after a short delay
+        if (status === 'connected') {
+            setTimeout(() => {
+                router.visit(route('devices.index'), {
+                    // Using Inertia's flash messages
+                    with: { success: 'Device connected successfully!' } 
+                });
+            }, 1500);
+        }
+
+        // Cleanup function
+        return () => stopPolling();
+        
+    }, [status, device?.session_id, sessionId]); // Re-run effect if status changes
+
+    // --- Status Configuration with New States ---
     const statusConfig = {
         'pending-qr': {
             message: 'Starting session on gateway, awaiting QR code...',
@@ -71,6 +108,24 @@ export default function Create({ auth, sessionId, device }) {
             color: 'border-green-500',
             progress: 100
         },
+        'expired': {
+            message: 'QR code expired. Please try again.',
+            icon: '⌛',
+            color: 'border-red-500',
+            progress: 0
+        },
+        'failed': {
+            message: 'Connection failed. Please try again.',
+            icon: '❌',
+            color: 'border-red-500',
+            progress: 0
+        },
+        'disconnected': {
+            message: 'Device disconnected.',
+            icon: '🔌',
+            color: 'border-red-500',
+            progress: 0
+        },
         'default': {
             message: 'Initializing session...',
             icon: '⚡',
@@ -79,7 +134,7 @@ export default function Create({ auth, sessionId, device }) {
         }
     };
 
-    const currentStatus = statusConfig[currentDevice?.status] || statusConfig.default;
+    const currentStatus = statusConfig[status] || statusConfig.default;
 
     return (
         <AuthenticatedLayout
@@ -98,6 +153,7 @@ export default function Create({ auth, sessionId, device }) {
                             View Devices
                         </Link>
                     </div>
+                    {console.log("DEVICE LOG: ", device.qr_code_url)}
                 </div>
             }
         >
@@ -159,10 +215,10 @@ export default function Create({ auth, sessionId, device }) {
                             </div>
                             
                             <div className="flex justify-center min-h-[320px] items-center bg-gradient-to-br from-gray-50 to-gray-100 p-6 rounded-2xl shadow-inner">
-                                {currentDevice && currentDevice.qr_code_url ? (
+                                {status === 'scanning' && qrCodeUrl ? (
                                     <div className="text-center">
                                         <img 
-                                            src={currentDevice.qr_code_url} 
+                                            src={qrCodeUrl} 
                                             alt="WhatsApp QR Code" 
                                             className="w-72 h-72 rounded-xl shadow-2xl border-8 border-white mx-auto"
                                         />
@@ -173,14 +229,29 @@ export default function Create({ auth, sessionId, device }) {
                                 ) : (
                                     <div className="text-center p-6">
                                         <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-100 rounded-full mb-4">
-                                            <svg className="w-8 h-8 text-indigo-500 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 2a10 10 0 100 20 10 10 0 000-20z"></path>
-                                            </svg>
+                                            {(isRestarting || status === 'pending-qr' || status === 'connecting') ? (
+                                                <svg className="w-8 h-8 text-indigo-500 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 2a10 10 0 100 20 10 10 0 000-20z"></path>
+                                                </svg>
+                                            ) : (
+                                                <span className="text-4xl">{currentStatus.icon}</span>
+                                            )}
                                         </div>
-                                        <p className="text-lg font-medium text-gray-700">Generating QR Code...</p>
+                                        <p className="text-lg font-medium text-gray-700">{currentStatus.message}</p>
                                         <p className="mt-2 text-sm text-gray-500">
-                                            Please wait while we prepare your connection
+                                            {isRestarting ? 'Restarting session...' : 'Please wait while we prepare your connection'}
                                         </p>
+                                        
+                                        {/* Show restart button for error states */}
+                                        {['expired', 'failed', 'disconnected'].includes(status) && (
+                                            <button
+                                                onClick={restartSession}
+                                                disabled={isRestarting}
+                                                className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:bg-gray-400 transition-colors"
+                                            >
+                                                {isRestarting ? 'Restarting...' : 'Try Again'}
+                                            </button>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -190,7 +261,7 @@ export default function Create({ auth, sessionId, device }) {
                                 <div className="flex items-center justify-between text-sm">
                                     <span className="text-gray-600 font-medium">Session ID:</span>
                                     <span className="font-mono text-gray-800 bg-white px-3 py-1 rounded-lg border">
-                                        {sessionId}
+                                        {device?.session_id || sessionId}
                                     </span>
                                 </div>
                                 <p className="mt-3 text-xs text-gray-500 text-center">

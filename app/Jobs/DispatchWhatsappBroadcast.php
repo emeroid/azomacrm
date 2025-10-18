@@ -12,10 +12,14 @@ class DispatchWhatsappBroadcast implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    // A reasonable chunk size to avoid overwhelming the queue driver
+    private const CHUNK_SIZE = 200;
+
     protected string $sessionId;
     protected array $phoneNumbers;
     protected string $message;
     protected int $messageDelaySeconds;
+    protected int $userId; // Pass user ID for ownership
     protected ?int $campaignId;
     protected ?int $scheduledMessageId;
     protected ?int $autoResponderLogId;
@@ -28,6 +32,7 @@ class DispatchWhatsappBroadcast implements ShouldQueue
         array $phoneNumbers, 
         string $message, 
         int $delaySeconds,
+        int $userId,
         ?int $campaignId = null,
         ?int $scheduledMessageId = null,
         ?int $autoResponderLogId = null
@@ -37,6 +42,7 @@ class DispatchWhatsappBroadcast implements ShouldQueue
         $this->phoneNumbers = $phoneNumbers;
         $this->message = $message;
         $this->messageDelaySeconds = $delaySeconds;
+        $this->userId = $userId;
         $this->campaignId = $campaignId;
         $this->scheduledMessageId = $scheduledMessageId;
         $this->autoResponderLogId = $autoResponderLogId;
@@ -47,24 +53,30 @@ class DispatchWhatsappBroadcast implements ShouldQueue
      */
     public function handle(): void
     {
-        $delayCounter = 0;
+        // Split the total numbers into manageable chunks
+        $chunks = array_chunk($this->phoneNumbers, self::CHUNK_SIZE);
+        $cumulativeDelay = 0;
 
-        foreach ($this->phoneNumbers as $number) {
-            // Calculate the cumulative delay for this specific message
-            $calculatedDelay = $this->messageDelaySeconds * $delayCounter;
+        foreach ($chunks as $chunk) {
+            foreach ($chunk as $number) {
+                // Dispatch an individual job for each number within the chunk
+                SendSingleWhatsappMessage::dispatch(
+                    $this->sessionId,
+                    $number,
+                    $this->message,
+                    $this->userId,
+                    $this->campaignId,
+                    $this->scheduledMessageId,
+                    $this->autoResponderLogId
+                )->delay(now()->addSeconds($cumulativeDelay));
 
-            // Dispatch an individual job for each number with the calculated delay
-            SendSingleWhatsappMessage::dispatch(
-                $this->sessionId,
-                $number,
-                $this->message,
-                $this->campaignId,
-                $this->scheduledMessageId,
-                $this->autoResponderLogId
-            )->delay(now()->addSeconds($calculatedDelay));
+                // The delay only increments after dispatching a job
+                $cumulativeDelay += $this->messageDelaySeconds;
+            }
 
-            
-            $delayCounter++;
+            // Optional: Add a small sleep between chunks to further ease pressure
+            // on the gateway if you're sending very rapidly.
+            sleep(1);
         }
     }
 }

@@ -73,6 +73,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/devices/link', [WhatsAppDeviceController::class, 'startSession'])->name('devices.start'); // New route for starting the process
     Route::get('/devices/{sessionId}/status', [WhatsAppDeviceController::class, 'showStatus'])->name('devices.status');
+    Route::get('/devices/{sessionId}/get-status', [WhatsAppDeviceController::class, 'getDeviceStatus'])->name('devices.get-status');
 });
 
 // Form Templates Routes
@@ -110,6 +111,7 @@ Route::prefix('webhook')->group(function () {
     Route::post('/disconnected', [WebhookController::class, 'handleDeviceDisconnected']);
     Route::post('/message', [WebhookController::class, 'handleIncomingMessage']);
     Route::post('/message-status-update', [WebhookController::class, 'handleMessageStatusUpdate']);
+    Route::post('/qr-timeout', [WebhookController::class, 'handleQrTimeout']);
 });
 
 Route::prefix('auto-responder')->group(function () {

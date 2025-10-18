@@ -20,51 +20,111 @@ class WhatsAppDeviceController extends Controller
         ]);
     }
 
+    // public function startSession()
+    // {
+
+    //     // Check if there's already an existing un-connected device for the user and use that session ID if available
+    //     $existingDevice = auth()->user()->whatsappDevices()
+    //         ->where('status', '!=', 'connected')
+    //         ->first();
+
+    //     if ($existingDevice) {
+    //         $sessionId = $existingDevice->session_id;
+    //         // Optionally: Check if the session is still active on the gateway, re-start if needed
+
+    //         $this->wormServer($sessionId);
+
+    //     } else {
+    //         $sessionId = 'user-' . auth()->id() . '-' . Str::random(10);
+    //         $response = $this->wormServer($sessionId);
+    //         if ($response->successful() || $response->status() === 202) {
+    //             // 2. Save the new device to the DB
+    //             auth()->user()->whatsappDevices()->create([
+    //                 'session_id' => $sessionId,
+    //                 'status' => 'pending-qr',
+    //                 'qr_code_url' => null,
+    //             ]);
+    //         } else {
+    //             return redirect()->route('devices.index')->withErrors(['gateway' => 'Could not connect to the WhatsApp Gateway. Please try again later.']);
+    //         }
+    //     }
+
+    //     // 3. Redirect to the dedicated status page which will handle the polling
+    //     return redirect()->route('devices.status', ['sessionId' => $sessionId]);
+    // }
+
+
+    // // The new Inertia page that is responsible for showing status and polling
+    // public function showStatus(string $sessionId)
+    // {
+    //     $device = auth()->user()->whatsappDevices()
+    //         ->where('session_id', $sessionId)
+    //         ->firstOrFail();
+
+    //     return Inertia::render('WhatsApp/Devices/Create', [
+    //         'sessionId' => $device->session_id,
+    //         'device' => $device->toArray(), // Pass the device data
+    //     ]);
+    // }
+
     public function startSession()
     {
-
-        // Check if there's already an existing un-connected device for the user and use that session ID if available
-        $existingDevice = auth()->user()->whatsappDevices()
-            ->where('status', '!=', 'connected')
+        // Find or create a device record in a 'disconnected' state.
+        $device = auth()->user()->whatsappDevices()
+            ->whereIn('status', ['disconnected', 'pending-qr', 'scanning', 'expired']) // Look for any non-connected device
             ->first();
 
-        if ($existingDevice) {
-            $sessionId = $existingDevice->session_id;
-            // Optionally: Check if the session is still active on the gateway, re-start if needed
-
-            $this->wormServer($sessionId);
-
+        if (!$device) {
+            $device = auth()->user()->whatsappDevices()->create([
+                'session_id' => 'user-' . auth()->id() . '-' . Str::random(10),
+                'status' => 'pending-qr', // Initial state
+            ]);
         } else {
-            $sessionId = 'user-' . auth()->id() . '-' . Str::random(10);
-            $response = $this->wormServer($sessionId);
-            if ($response->successful() || $response->status() === 202) {
-                // 2. Save the new device to the DB
-                auth()->user()->whatsappDevices()->create([
-                    'session_id' => $sessionId,
-                    'status' => 'pending-qr',
-                    'qr_code_url' => null,
-                ]);
-            } else {
-                return redirect()->route('devices.index')->withErrors(['gateway' => 'Could not connect to the WhatsApp Gateway. Please try again later.']);
-            }
+            // Reset the state for a new attempt
+            $device->update(['status' => 'pending-qr', 'qr_code_url' => null]);
         }
 
-        // 3. Redirect to the dedicated status page which will handle the polling
-        return redirect()->route('devices.status', ['sessionId' => $sessionId]);
+        // Now, tell the Node server to start the process
+        $response = $this->callGateway('/sessions/start', ['sessionId' => $device->session_id]);
+        
+        if (!$response->successful()) {
+            $device->update(['status' => 'failed']);
+            return redirect()->route('devices.index')->withErrors(['gateway' => 'Could not connect to the WhatsApp Gateway.']);
+        }
+
+        // Redirect to the status page, which will handle everything else
+        return redirect()->route('devices.status', ['sessionId' => $device->session_id]);
     }
 
-
-    // The new Inertia page that is responsible for showing status and polling
     public function showStatus(string $sessionId)
     {
-        $device = auth()->user()->whatsappDevices()
-            ->where('session_id', $sessionId)
-            ->firstOrFail();
-
+        $device = auth()->user()->whatsappDevices()->where('session_id', $sessionId)->firstOrFail();
+        
         return Inertia::render('WhatsApp/Devices/Create', [
-            'sessionId' => $device->session_id,
-            'device' => $device->toArray(), // Pass the device data
+            'initialDevice' => $device->toArray(), // Pass initial data
         ]);
+    }
+
+    /**
+     * NEW: API endpoint for the frontend to poll device status.
+     * This route MUST be protected by auth middleware.
+     */
+    public function getDeviceStatus(string $sessionId)
+    {
+        $device = auth()->user()->whatsappDevices()->where('session_id', $sessionId)->firstOrFail();
+        return response()->json($device->toArray());
+    }
+
+    /**
+     * Helper to call the gateway with the API key.
+     */
+    protected function callGateway(string $endpoint, array $data)
+    {
+        $gatewayUrl = config('services.whatsapp.gateway_url');
+        $apiKey = config('services.whatsapp.api_key');
+
+        return Http::withHeaders(['X-API-KEY' => $apiKey])
+            ->post("{$gatewayUrl}{$endpoint}", $data);
     }
 
 
@@ -79,61 +139,6 @@ class WhatsAppDeviceController extends Controller
 
         return redirect()->back()->with('success', 'Device Name updated successfully');
     }
-
-    protected function wormServer($sessionId) {
-        $gatewayUrl = config('services.whatsapp.gateway_url');
-        return Http::post("{$gatewayUrl}/sessions/start", ['sessionId' => $sessionId]);
-    }
-
-
-    // /**
-    //  * Show the form for creating a new device (starts session process).
-    //  */
-    // public function create()
-    // {
-    //     $sessionId = 'user-' . auth()->id() . '-' . Str::random(10);
-    //     $gatewayUrl = config('services.whatsapp.gateway_url');
-        
-    //     // 1. Call the Node.js gateway to START a session (it responds 202 immediately)
-    //     $response = Http::post("{$gatewayUrl}/sessions/start", [
-    //         'sessionId' => $sessionId,
-    //     ]);
-
-    //     if ($response->successful() || $response->status() === 202) {
-    //         // 2. Save the device to the DB with a "pending-qr" status.
-    //         // The QR code URL will be filled by the webhook later.
-    //         auth()->user()->whatsappDevices()->create([
-    //             'session_id' => $sessionId,
-    //             'status' => 'pending-qr', // Initial status
-    //             'qr_code_url' => null,     // Will be updated by the webhook
-    //         ]);
-
-    //         // 3. Return the Inertia view for the frontend to start polling this device's status.
-    //         return Inertia::render('WhatsApp/Devices/Create', [
-    //             'sessionId' => $sessionId,
-    //             // We no longer pass the qrCode here, as it's not ready yet.
-    //         ]);
-    //     }
-
-    //     return redirect()->route('devices.index')->withErrors(['gateway' => 'Could not connect to the WhatsApp Gateway. Please try again later.']);
-    // }
-    
-    /**
-     * Inertia endpoint for the frontend to poll the status of a device.
-     * This MUST return an Inertia response.
-     */
-    // public function getDeviceStatus(Request $request, string $sessionId)
-    // {
-    //     $device = auth()->user()->whatsappDevices()
-    //         ->where('session_id', $sessionId)
-    //         ->firstOrFail();
-
-    //     // Return the current device data back to the same Inertia component
-    //     return Inertia::render('WhatsApp/Devices/Create', [
-    //         'sessionId' => $device->session_id,
-    //         'device' => $device->toArray(), // Pass the device object for status/QR data
-    //     ]);
-    // }
 
     /**
      * Remove the specified device from storage.

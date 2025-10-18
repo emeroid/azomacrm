@@ -41,14 +41,11 @@ class CampaignController extends Controller
             'contacts_file' => 'nullable|file|mimes:xlsx,xls,csv',
         ]);
         
-        // --- PRE-FLIGHT WARM-UP ---
-        // As a safety measure, we'll ping the /sessions/start endpoint.
-        // If the session is already active, the gateway will do nothing.
-        // If the gateway restarted, this will re-initialize it.
-        $gatewayUrl = config('services.whatsapp.gateway_url');
-        Http::post("{$gatewayUrl}/sessions/start", [
-            'sessionId' => $validated['session_id'],
-        ]);
+        // --- PRE-FLIGHT WARM-UP (with API Key) ---
+        Http::withHeaders(['X-API-KEY' => config('services.whatsapp.api_key')])
+            ->post(config('services.whatsapp.gateway_url') . '/sessions/start', [
+                'sessionId' => $validated['session_id'],
+            ]);
 
         // Phone number processing logic (your code is good)
         $phoneNumbers = [];
@@ -80,67 +77,10 @@ class CampaignController extends Controller
             $phoneNumbers,
             $validated['message'],
             $validated['delay'],
+            auth()->id(),
             $campaign->id
         );
 
         return redirect()->back()->with('success', 'Campaign has been queued successfully!');
     }
 }
-
-// namespace App\Http\Controllers;
-
-// use Illuminate\Http\Request;
-// use Inertia\Inertia;
-// use App\Jobs\SendWhatsappBroadcast;
-// use Maatwebsite\Excel\Facades\Excel;
-
-// class CampaignController extends Controller
-// {
-//     public function create()
-//     {
-//         return Inertia::render('Campaigns/Create', [
-//             'devices' => auth()->user()->whatsappDevices()->get(),
-//         ]);
-//     }
-
-//     public function store(Request $request)
-//     {
-        
-//         $validated = $request->validate([
-//             'session_id' => 'required|string', // ADDED: Ensure session_id is validated from the form/request body
-//             'message' => 'required|string|min:1',
-//             'delay' => 'required|integer|min:1',
-//             'input_method' => 'required|in:manual,file',
-//             'phone_numbers' => 'required_if:input_method,manual|string',
-//             'contacts_file' => 'nullable',
-//         ]);
-
-//         // dd($validated);
-
-//         $phoneNumbers = [];
-
-        
-        
-//         // Retrieve session_id from the validated data
-//         $sessionId = $validated['session_id'];
-
-//         if ($validated['input_method'] === 'manual') {
-//             // Split numbers by new line, trim whitespace, and filter out empty lines
-//             $phoneNumbers = array_filter(array_map('trim', explode("\n", $validated['phone_numbers'])));
-//         } else {
-//             // Parse the uploaded file
-//             $rows = Excel::toCollection(null, $request->file('contacts_file'))[0]; // Get the first sheet
-//             $phoneNumbers = $rows->flatten()->filter()->all(); // Assuming numbers are in the first column
-//         }
-
-//         // Dispatch the job to the queue
-//         SendWhatsappBroadcast::dispatch(
-//             $sessionId, // Now using the variable retrieved from $validated
-//             $phoneNumbers,
-//             $validated['message'],
-//             $validated['delay']
-//         );
-
-//         return redirect()->back()->with('success', 'Campaign has been queued successfully!');
-//     }
-// }
