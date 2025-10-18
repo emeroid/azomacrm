@@ -137,7 +137,7 @@ class WebhookController extends Controller
     {
         $validated = $request->validate([
             // Use exists validation to ensure the message_id is one we are tracking
-            'messageId' => 'required|string|exists:message_logs,message_id', 
+            'messageId' => 'required|string', 
             'sessionId' => 'required|string|exists:whatsapp_devices,session_id', // Good for cross-reference
             'status' => 'required|string|in:sent,delivered,read,failed', // Added 'failed'
             'timestamp' => 'required|date',
