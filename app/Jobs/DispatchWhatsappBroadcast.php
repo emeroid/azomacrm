@@ -68,7 +68,7 @@ class DispatchWhatsappBroadcast implements ShouldQueue
                     $this->campaignId,
                     $this->scheduledMessageId,
                     $this->autoResponderLogId
-                )->delay(now()->addSeconds($cumulativeDelay));
+                )->onQueue('whatsapp-broadcasts')->delay(now()->addSeconds($cumulativeDelay));
 
                 // The delay only increments after dispatching a job
                 $cumulativeDelay += $this->messageDelaySeconds;
