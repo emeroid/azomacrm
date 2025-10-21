@@ -210,21 +210,48 @@ return [
             'timeout' => 60,
             'nice' => 0,
         ],
+        // START: NEW CONFIGURATION ADDED
+        'supervisor-broadcasts' => [
+            'connection' => 'redis',
+            'queue' => ['whatsapp-broadcasts'],
+            'balance' => 'simple',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1, // Always 1 process for sequential jobs
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 128,
+            'tries' => 1,      // You likely don't want failed broadcasts to retry
+            'timeout' => 300,  // Increased timeout for potentially long campaigns
+            'nice' => 0,
+        ],
+        // END: NEW CONFIGURATION ADDED
     ],
 
     'environments' => [
         'production' => [
             'supervisor-1' => [
-                'maxProcesses' => 10,
+                'maxProcesses' => 9, // CHANGED: Reduced from 10 to allocate one for broadcasts
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
+            // START: NEW CONFIGURATION ADDED
+            'supervisor-broadcasts' => [
+                'maxProcesses' => 1, // This worker pool will only have one process
+                'balanceMaxShift' => 1,
+                'balanceCooldown' => 3,
+            ],
+            // END: NEW CONFIGURATION ADDED
         ],
 
         'local' => [
             'supervisor-1' => [
-                'maxProcesses' => 3,
+                'maxProcesses' => 2, // CHANGED: Reduced from 3
             ],
+            // START: NEW CONFIGURATION ADDED
+            'supervisor-broadcasts' => [
+                'maxProcesses' => 1, // Also add it for local testing
+            ],
+            // END: NEW CONFIGURATION ADDED
         ],
     ],
 ];

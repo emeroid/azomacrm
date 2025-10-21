@@ -79,7 +79,7 @@ class CampaignController extends Controller
             $validated['delay'],
             auth()->id(),
             $campaign->id
-        );
+        )->onQueue('whatsapp-broadcasts');
 
         return redirect()->back()->with('success', 'Campaign has been queued successfully!');
     }

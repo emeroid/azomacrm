@@ -92,36 +92,6 @@ class SendSingleWhatsappMessage implements ShouldQueue
                 throw new \Exception('Gateway failed to send message: ' . ($data['error'] ?? 'Unknown error'));
             }
 
-            // $response = Http::timeout(self::HTTP_TIMEOUT_SECONDS)
-            //      ->post(config('services.whatsapp.gateway_url') . '/messages/send', [
-            //         'sessionId' => $this->sessionId,
-            //         'to' => $this->phoneNumber,
-            //         'message' => $this->message,
-            // ]);
-
-            // $data = $response->json();
-
-            // if ($response->successful() && isset($data['success']) && $data['success'] && isset($data['id'])) {
-            //     MessageLog::create([
-            //         'user_id' => $this->userId,
-            //         'message_id' => $data['id'],
-            //         'session_id' => $this->sessionId,
-            //         'recipient_number' => $this->phoneNumber,
-            //         'message' => $this->message,
-            //         'status' => 'queued',
-            //         'sent_at' => null,
-            //         'campaign_id' => $this->campaignId,
-            //         'scheduled_message_id' => $this->scheduledMessageId,
-            //         'auto_responder_log_id' => $this->autoResponderLogId,
-            //     ]);
-            //     Log::info("Message logged successfully for {$this->phoneNumber}. ID: {$data['id']}");
-            // } else {
-            //     $errorDetails = $data['error'] ?? 'Unknown gateway error.';
-            //     Log::error("Failed to send message to {$this->phoneNumber} via gateway: {$errorDetails}");
-            //     $this->createFailedMessageLog();
-            //     $this->updateParentFailureCount();
-            // }
-
         } catch (\Exception $e) {
             Log::error("HTTP connection failed to gateway for {$this->phoneNumber}: " . $e->getMessage());
 

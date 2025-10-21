@@ -92,7 +92,7 @@ class ProcessScheduledMessages extends Command
                     $message->id,               // 6th Arg: scheduledMessageId (CRUCIAL)
                     null
 
-                );
+                )->onQueue('whatsapp-broadcasts');
             }
 
             $message->update(['sent_at' => now()]);

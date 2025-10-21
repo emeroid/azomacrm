@@ -230,7 +230,7 @@ class WebhookController extends Controller
             null,       // Campaign ID (5th arg) - Not applicable here
             null,       // Scheduled Message ID (6th arg) - Not applicable here
             $autoResponderLogId // Auto Responder Log ID (7th arg) - Applicable
-        );
+        )->onQueue('whatsapp-broadcasts');
     }
 
     /**
