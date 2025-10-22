@@ -185,7 +185,7 @@ class WebhookController extends Controller
             if ($log->campaign_id) {
                 // This is a Campaign message
                 $campaign = $log->campaign;
-                if ($validated['status'] === 'sent' && $campaign->sent_count === 0) {
+                if ($validated['status'] === 'sent' && $campaign->sent_count <= $campaign->total_recipients) {
                     // Prevent counting the 'sent' status multiple times for the same message
                     // We typically count success on 'delivered' or 'sent' if delivery is not tracked.
                     // Let's count success on SENT/DELIVERED and failure on FAILED.
