@@ -228,7 +228,7 @@ export default function Index({ auth, devices }) {
 
                                                 <div className="mb-4">
                                                     <p className="text-sm text-gray-600 mb-2">
-                                                        Session ID: <span className="font-mono text-gray-800 bg-gray-100 px-2 py-1 rounded text-xs">{device.session_id}</span>
+                                                        Session ID: <span className="font-mono text-gray-800 bg-gray-100 px-2 py-1 rounded text-xs">{device.phone_number}</span>
                                                     </p>
                                                     <p className="text-xs text-gray-500">
                                                         Last updated: {new Date(device.updated_at).toLocaleString()}
@@ -335,7 +335,7 @@ export default function Index({ auth, devices }) {
                                     {deviceToDelete.name || `Device #${deviceToDelete.id}`}
                                 </p>
                                 <p className="text-red-600 text-sm mt-2">
-                                    Phone: +{deviceToDelete.phone}
+                                    Phone: +{deviceToDelete.phone_number}
                                 </p>
                             </div>
                             
