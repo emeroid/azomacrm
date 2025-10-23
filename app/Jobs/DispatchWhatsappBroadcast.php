@@ -7,31 +7,32 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use App\Models\WhatsappDevice; // <-- Import the model
 
 class DispatchWhatsappBroadcast implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    // A reasonable chunk size to avoid overwhelming the queue driver
     private const CHUNK_SIZE = 200;
 
     protected string $sessionId;
     protected array $phoneNumbers;
     protected string $message;
-    protected int $messageDelaySeconds;
-    protected int $userId; // Pass user ID for ownership
+    protected ?string $mediaUrl;
+    protected int $userId; 
     protected ?int $campaignId;
     protected ?int $scheduledMessageId;
     protected ?int $autoResponderLogId;
 
     /**
      * Create a new job instance.
+     * We remove $delaySeconds from here.
      */
     public function __construct(
         string $sessionId, 
         array $phoneNumbers, 
         string $message, 
-        int $delaySeconds,
+        string $mediaUrl,
         int $userId,
         ?int $campaignId = null,
         ?int $scheduledMessageId = null,
@@ -41,7 +42,7 @@ class DispatchWhatsappBroadcast implements ShouldQueue
         $this->sessionId = $sessionId;
         $this->phoneNumbers = $phoneNumbers;
         $this->message = $message;
-        $this->messageDelaySeconds = $delaySeconds;
+        $this->mediaUrl = $mediaUrl;
         $this->userId = $userId;
         $this->campaignId = $campaignId;
         $this->scheduledMessageId = $scheduledMessageId;
@@ -53,30 +54,34 @@ class DispatchWhatsappBroadcast implements ShouldQueue
      */
     public function handle(): void
     {
-        // Split the total numbers into manageable chunks
+        // **NEW: Fetch the device and its delay settings**
+        $device = WhatsappDevice::where('session_id', $this->sessionId)->first();
+
+        // Use device's settings or fallback to defaults
+        $minDelay = $device->min_delay ?? 10;  // Default 5s
+        $maxDelay = $device->max_delay ?? 60; // Default 15s
+
         $chunks = array_chunk($this->phoneNumbers, self::CHUNK_SIZE);
         $cumulativeDelay = 0;
 
         foreach ($chunks as $chunk) {
             foreach ($chunk as $number) {
-                // Dispatch an individual job for each number within the chunk
+                // **NEW: Calculate a random delay for this specific message**
+                $randomDelay = rand($minDelay, $maxDelay);
+                $cumulativeDelay += $randomDelay;
+
                 SendSingleWhatsappMessage::dispatch(
                     $this->sessionId,
                     $number,
                     $this->message,
+                    $this->mediaUrl,
                     $this->userId,
                     $this->campaignId,
                     $this->scheduledMessageId,
                     $this->autoResponderLogId
                 )->onQueue('whatsapp-broadcasts')->delay(now()->addSeconds($cumulativeDelay));
-
-                // The delay only increments after dispatching a job
-                $cumulativeDelay += $this->messageDelaySeconds;
             }
-
-            // Optional: Add a small sleep between chunks to further ease pressure
-            // on the gateway if you're sending very rapidly.
-            sleep(1);
+            sleep(3);
         }
     }
 }

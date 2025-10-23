@@ -7,6 +7,7 @@ use App\Models\FormSubmission;
 use App\Models\Order;
 use App\Models\ScheduledMessage;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Http;
 
 class ProcessScheduledMessages extends Command
 {
@@ -29,12 +30,19 @@ class ProcessScheduledMessages extends Command
      */
     public function handle()
     {
+
         $messages = ScheduledMessage::where('send_at', '<=', now())
                                     ->whereNull('sent_at')
                                     ->get();
 
         foreach ($messages as $message) {
             
+            // --- 1. PRE-FLIGHT WARM-UP (This is correct!) ---
+            Http::withHeaders(['X-API-KEY' => config('services.whatsapp.api_key')])
+            ->post(config('services.whatsapp.gateway_url') . '/sessions/start', [
+                'sessionId' => $message->device->session_id,
+            ]);
+
             $potentialRecipients = [];
             
             if ($message->action_type === Order::class) {
@@ -48,7 +56,6 @@ class ProcessScheduledMessages extends Command
                 $orders = $query->get();
                 
                 foreach ($orders as $order) {
-                    // 💡 NEW: Check both fields, prioritizing 'mobile' (or based on business logic)
                     $potentialRecipients[] = $order->mobile;
                     $potentialRecipients[] = $order->phone;
                 }
@@ -79,17 +86,14 @@ class ProcessScheduledMessages extends Command
             // 2. Dispatch Sending Job
             if (!empty($recipients) && $message->whatsapp_device_id) {
                 
-                // CRUCIAL: The SendWhatsappBroadcast job (or a service it uses)
-                // MUST contain logic to hit your gateway's "check number" API
-                // before actually sending, to prevent wasting credits/time on invalid numbers.
-                $delaySeconds = 30;
                 \App\Jobs\DispatchWhatsappBroadcast::dispatch(
                     $message->device->session_id,
                     $recipients, // Send the list of potential 
                     $message->message,
-                    $delaySeconds,              // 4th Arg: delaySeconds (Required)
-                    null,                       // 5th Arg: campaignId (Not Applicable)
-                    $message->id,               // 6th Arg: scheduledMessageId (CRUCIAL)
+                    $message->media_url,
+                    $message->device->user_id,
+                    null,                       // 4th Arg: campaignId (Not Applicable)
+                    $message->id,               // 5th Arg: scheduledMessageId (CRUCIAL)
                     null
 
                 )->onQueue('whatsapp-broadcasts');

@@ -16,10 +16,12 @@ class MessageLog extends Model
         'session_id',
         'recipient_number',
         'message',
+        'media_url',
         'status',
         'sent_at',
         'delivered_at',
         'read_at',
+        'failure_reason',
 
         // --- NEW FOREIGN KEYS for Analytics ---
         'user_id',                   // Needed for general analytics access

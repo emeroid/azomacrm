@@ -8,62 +8,87 @@ use App\Models\MessageLog; // Used for Campaigns/Broadcasts
 use App\Models\AutoResponderLog; // Used for AutoResponder replies
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
+use Illuminate\Support\Carbon;
 
 class WaAnalyticsController extends Controller
 {
     public function index()
     {
         $user = auth()->user();
-        
-        // --- 1. Scheduled Message Analytics ---
-        $scheduledAnalytics = $user->scheduledMessages()
-            ->selectRaw('SUM(sent_count) as total_sent, SUM(failed_count) as total_failed')
-            ->first();
-            
-        $scheduledData = [
-            'total' => (int) $scheduledAnalytics->total_sent + (int) $scheduledAnalytics->total_failed,
-            'success' => (int) $scheduledAnalytics->total_sent,
-            'failure' => (int) $scheduledAnalytics->total_failed,
-        ];
-        
-        // --- 2. Auto Responder Analytics ---
-        $responderAnalytics = $user->autoResponders()
-            ->selectRaw('SUM(hit_count) as total_hits')
-            ->first();
-            
-        $responderData = [
-            'total_hits' => (int) $responderAnalytics->total_hits,
-            // Get success/failure from the log table
-            'reply_status' => AutoResponderLog::whereIn('auto_responder_id', $user->autoResponders()->pluck('id'))
-                ->select('status', DB::raw('count(*) as count'))
-                ->groupBy('status')
-                ->pluck('count', 'status')
-                ->toArray(),
-        ];
-        
-        // --- 3. Campaign (Broadcast) Analytics ---
-        // Assuming every broadcast creates N MessageLog entries belonging to the user
-        // and you can differentiate a Campaign log from a Scheduled log (e.g., using a tag in MessageLog)
-        // For simplicity, we'll analyze all user's message logs based on status.
-        $campaignLogStatuses = MessageLog::where('user_id', $user->id)
-            // IMPORTANT: You need a way to filter only CAMPAIGN messages, 
-            // e.g., where('type', 'campaign') if you added a 'type' column to MessageLog
-            ->whereIn('status', ['sent', 'delivered', 'read', 'failed']) // Assuming 'failed' is a status
-            ->select('status', DB::raw('count(*) as count'))
-            ->groupBy('status')
-            ->pluck('count', 'status')
-            ->toArray();
+        $today = Carbon::today();
+        $yesterday = Carbon::yesterday();
 
-        $campaignData = [
-            'total' => array_sum($campaignLogStatuses),
-            'success' => ($campaignLogStatuses['sent'] ?? 0) + ($campaignLogStatuses['delivered'] ?? 0) + ($campaignLogStatuses['read'] ?? 0),
-            'failure' => $campaignLogStatuses['failed'] ?? 0,
+        // Get message logs for the current user
+        $messageLogs = MessageLog::where('user_id', $user->id)
+            ->whereDate('created_at', '>=', $today->subDays(7))
+            ->with(['campaign', 'scheduledMessage'])
+            ->get();
+
+        // Overview Statistics
+        $overview = [
+            'total_messages' => $messageLogs->count(),
+            'successful_messages' => $messageLogs->whereIn('status', ['sent', 'delivered'])->count(),
+            'failed_messages' => $messageLogs->where('status', 'failed')->count(),
+            'success_rate' => $messageLogs->count() > 0 ? 
+                round(($messageLogs->whereIn('status', ['sent', 'delivered'])->count() / $messageLogs->count()) * 100, 1) : 0,
         ];
-        
+
+        // Message Trends
+        $messageTrends = [
+            'sent' => $messageLogs->where('status', 'sent')->count(),
+            'delivered' => $messageLogs->where('status', 'delivered')->count(),
+            'failed' => $messageLogs->where('status', 'failed')->count(),
+            'pending' => $messageLogs->where('status', 'pending')->count(),
+        ];
+
+        // Failure Breakdown
+        $failureReasons = $messageLogs->where('status', 'failed')->pluck('failure_reason');
+        $failureBreakdown = [
+            'invalid_number' => $failureReasons->filter(fn($reason) => stripos($reason, 'invalid') !== false)->count(),
+            'network_error' => $failureReasons->filter(fn($reason) => stripos($reason, 'network') !== false || stripos($reason, 'timeout') !== false)->count(),
+            'device_offline' => $failureReasons->filter(fn($reason) => stripos($reason, 'offline') !== false || stripos($reason, 'disconnected') !== false)->count(),
+            'rate_limited' => $failureReasons->filter(fn($reason) => stripos($reason, 'rate') !== false || stripos($reason, 'limit') !== false)->count(),
+            'other' => $failureReasons->count() - 
+                $failureReasons->filter(fn($reason) => stripos($reason, 'invalid') !== false)->count() -
+                $failureReasons->filter(fn($reason) => stripos($reason, 'network') !== false || stripos($reason, 'timeout') !== false)->count() -
+                $failureReasons->filter(fn($reason) => stripos($reason, 'offline') !== false || stripos($reason, 'disconnected') !== false)->count() -
+                $failureReasons->filter(fn($reason) => stripos($reason, 'rate') !== false || stripos($reason, 'limit') !== false)->count(),
+        ];
+
+        // Source Breakdown
+        $sourceBreakdown = [
+            'broadcasts' => $messageLogs->whereNotNull('campaign_id')->count(),
+            'broadcasts_failed' => $messageLogs->whereNotNull('campaign_id')->where('status', 'failed')->count(),
+            'scheduled' => $messageLogs->whereNotNull('scheduled_message_id')->count(),
+            'scheduled_failed' => $messageLogs->whereNotNull('scheduled_message_id')->where('status', 'failed')->count(),
+            'auto_replies' => $messageLogs->whereNotNull('auto_responder_log_id')->count(),
+            'auto_replies_failed' => $messageLogs->whereNotNull('auto_responder_log_id')->where('status', 'failed')->count(),
+        ];
+
+        // Recent Messages for detailed view
+        $recentMessages = $messageLogs->take(50)->map(function ($log) {
+            return [
+                'id' => $log->id,
+                'recipient_number' => $log->recipient_number,
+                'message' => $log->message,
+                'status' => $log->status,
+                'failure_reason' => $log->failure_reason,
+                'sent_at' => $log->sent_at,
+                'created_at' => $log->created_at,
+                'source' => $log->campaign_id ? 'broadcast' : 
+                           ($log->scheduled_message_id ? 'scheduled' : 
+                           ($log->auto_responder_log_id ? 'auto_responder' : 'unknown')),
+            ];
+        });
+
         return Inertia::render('Analytics/Index', [
-            'scheduledData' => $scheduledData,
-            'responderData' => $responderData,
-            'campaignData' => $campaignData,
+            'analyticsData' => [
+                'overview' => $overview,
+                'messageTrends' => $messageTrends,
+                'failureBreakdown' => $failureBreakdown,
+                'sourceBreakdown' => $sourceBreakdown,
+                'recentMessages' => $recentMessages,
+            ],
         ]);
     }
 }

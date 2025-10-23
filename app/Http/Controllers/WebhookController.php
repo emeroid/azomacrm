@@ -91,6 +91,7 @@ class WebhookController extends Controller
             'sessionId' => 'required|string|exists:whatsapp_devices,session_id',
             'from' => 'required|string',
             'body' => 'nullable|string',
+            'type' => 'required|string',
         ]);
 
         Log::info("Incoming message from {$validated['from']} on session {$validated['sessionId']}");
@@ -100,31 +101,81 @@ class WebhookController extends Controller
         if($device) {
             Log::info("Found User {$device->user_id} with Session Specific Auto responder from {$validated['from']} on session {$validated['sessionId']}");
         }
-        // Find an auto-responder that matches the incoming message
-        // This is a more efficient query than your original code
-        $responder = AutoResponder::where('keyword', 'LIKE', strtolower(trim($validated['body']) . '%' ))
-            ->where('user_id', $device->user_id) // if responders are user-specific
-            ->first();
+        
+        // Get all possible responders for this user
+        $allResponders = AutoResponder::where('user_id', $device->user_id)->get();
+        if ($allResponders->isEmpty()) {
+            return response()->json(['status' => 'ok', 'message' => 'No responders for user']);
+        }
 
-        if ($responder) {
+        $incomingType = $validated['type'];
+        $incomingBody = strtolower(trim($validated['body'] ?? ''));
+        $isText = ($incomingType === 'chat');
+        $isMedia = in_array($incomingType, ['image', 'video', 'ptt', 'audio', 'document']);
 
-            Log::info("Auto-responder triggered for keyword: '{$responder->keyword}'");
-                
-            // 1. Increment Hit Count on AutoResponder
-            $responder->increment('hit_count');
+        $foundResponder = null;
+
+        foreach ($allResponders as $responder) {
+            // --- 1. Check Reply Condition ---
+            if ($responder->reply_condition === 'text_only' && !$isText) continue;
+            if ($responder->reply_condition === 'media_only' && !$isMedia) continue;
+            
+            // At this point, the message type is valid for this responder.
+            // Now we check the keyword.
+            
+            $keyword = strtolower($responder->keyword);
+
+            // --- 2. Check for "Catch-All" Keyword (*) ---
+            if ($keyword === '*') {
+                $foundResponder = $responder;
+                break; // This is a catch-all for this message type, we're done.
+            }
+
+            // --- 3. Check for Specific Keyword (only if it's a text message or has a caption) ---
+            if ($isText || ($isMedia && !empty($incomingBody))) {
+                $isMatch = false;
+                switch ($responder->match_type) {
+                    case 'exact':
+                        $isMatch = ($incomingBody === $keyword);
+                        break;
+                    case 'contains':
+                        $isMatch = (!empty($keyword) && str_contains($incomingBody, $keyword));
+                        break;
+                    case 'starts_with':
+                        $isMatch = str_starts_with($incomingBody, $keyword);
+                        break;
+                }
+
+                if ($isMatch) {
+                    $foundResponder = $responder;
+                    break; // Found our match, stop looping
+                }
+            }
+        }
+
+        if ($foundResponder) {
+            Log::info("Auto-responder triggered for keyword: '{$foundResponder->keyword}'");
+            
+            $foundResponder->increment('hit_count');
     
-            // 2. Log the reply attempt (will be updated with 'sent'/'failed' later)
-            // Assuming AutoResponderLog model exists
             $log = \App\Models\AutoResponderLog::create([
-                'auto_responder_id' => $responder->id,
+                'auto_responder_id' => $foundResponder->id,
                 'recipient' => str_replace('@c.us', '', $validated['from']),
                 'sent_at' => now(),
-                'status' => 'attempted', // Initial status
+                'status' => 'attempted',
             ]);
                 
-            // 3. Send the reply
-            // Pass the log ID so the broadcast job/webhook can update the status
-            $this->sendReply($validated['sessionId'], $validated['from'], $responder->response_message, $log->id);
+            // **This needs to be updated to support media in auto-replies**
+            // For now, it only sends text. You would need to add `media_url`
+            // to your AutoResponder model to support this.
+            
+            $this->sendAutoReply(
+                $validated['sessionId'], 
+                $validated['from'], 
+                $foundResponder->response_message,
+                null, // **NEW: Add media_url here if you add it to your AutoResponder model**
+                $log->id
+            );
         }
 
         return response()->json(['status' => 'ok']);
@@ -176,19 +227,11 @@ class WebhookController extends Controller
             $log->update($updateData);
             Log::info("Message status updated: {$validated['messageId']} to {$validated['status']}");
 
-            // --- CRUCIAL: Update ScheduledMessage/Campaign Analytics ---
-            // If the MessageLog model has relationships/fields that link back to 
-            // the parent ScheduledMessage or Campaign, this is where you update its counters:
-            // e.g., if ($log->scheduledMessage) { $log->scheduledMessage->increment('sent_count'); }
-            // This logic depends on your full MessageLog model definition.
-
             if ($log->campaign_id) {
                 // This is a Campaign message
                 $campaign = $log->campaign;
                 if ($validated['status'] === 'sent' && $campaign->sent_count <= $campaign->total_recipients) {
-                    // Prevent counting the 'sent' status multiple times for the same message
-                    // We typically count success on 'delivered' or 'sent' if delivery is not tracked.
-                    // Let's count success on SENT/DELIVERED and failure on FAILED.
+
                     $campaign->increment('sent_count');
                 } elseif ($validated['status'] === 'delivered') {
                     // Update only if you track delivered specifically. Be careful not to double count!
@@ -204,6 +247,15 @@ class WebhookController extends Controller
                     $scheduledMessage->increment('failed_count');
                 }
             }
+
+            // If this message was from an auto-responder, update the parent log too.
+            if ($log->auto_responder_log_id) {
+                $autoLog = \App\Models\AutoResponderLog::find($log->auto_responder_log_id);
+                if ($autoLog) {
+                    // Keep the auto-log status in sync with the message log
+                    $autoLog->update(['status' => $validated['status']]);
+                }
+            }
         }
 
         return response()->json(['status' => 'ok']);
@@ -212,25 +264,26 @@ class WebhookController extends Controller
     /**
      * Helper function to send a reply via the gateway.
     */
-    private function sendReply(string $sessionId, string $to, string $message, ?int $autoResponderLogId = null): void
+    private function sendAutoReply(string $sessionId, string $to, string $message, ?string $mediaUrl, ?int $autoResponderLogId = null): void
     {
         $recipient = str_replace('@c.us', '', $to);
-        $gatewayUrl = config('services.whatsapp.gateway_url');
-
-        Http::post("{$gatewayUrl}/sessions/start", [
-            'sessionId' => $sessionId,
-        ])->throw();
-
-        // The Job now takes 7 arguments.
-        DispatchWhatsappBroadcast::dispatchSync(
+        $device = WhatsappDevice::where('session_id', $sessionId)->first();
+    
+        if (!$device) {
+             Log::error("Cannot send reply. Device session {$sessionId} not found.");
+             return;
+        }
+    
+        DispatchWhatsappBroadcast::dispatch(
             $sessionId, 
             [$recipient], 
-            $message, 
-            50,          // Delay in seconds (4th arg)
-            null,       // Campaign ID (5th arg) - Not applicable here
-            null,       // Scheduled Message ID (6th arg) - Not applicable here
-            $autoResponderLogId // Auto Responder Log ID (7th arg) - Applicable
-        )->onQueue('whatsapp-broadcasts');
+            $message,
+            $mediaUrl, // **Pass mediaUrl**
+            $device->user_id, // Pass the correct User ID
+            null,                // Campaign ID
+            null,                // Scheduled Message ID
+            $autoResponderLogId   // Auto Responder Log ID
+        )->onQueue('whatsapp-broadcasts'); // Use a specific queue
     }
 
     /**
@@ -250,6 +303,60 @@ class WebhookController extends Controller
                 'qr_code_url' => null,
             ]);
             Log::warning("QR Scan timed out for session: {$validated['sessionId']}");
+        }
+
+        return response()->json(['status' => 'success']);
+    }
+
+    /**
+     * Handle the final message ID update from the gateway.
+    */
+    public function handleMessageSent(Request $request)
+    {
+        $validated = $request->validate([
+            'tempMessageId' => 'required|string|exists:message_logs,message_id',
+            'finalMessageId' => 'required|string',
+            'sessionId' => 'required|string',
+        ]);
+
+        $log = MessageLog::where('message_id', $validated['tempMessageId'])->first();
+
+        if ($log) {
+            $log->update([
+                'message_id' => $validated['finalMessageId'], // Update to the real ID
+            ]);
+            Log::info("Final message ID updated for log: {$log->id}");
+        }
+
+        return response()->json(['status' => 'success']);
+    }
+
+    /**
+     * NEW: Handle immediate send failures from the gateway.
+     */
+    public function handleMessageFailed(Request $request)
+    {
+        $validated = $request->validate([
+            'tempMessageId' => 'required|string|exists:message_logs,message_id',
+            'sessionId' => 'required|string',
+            'reason' => 'required|string',
+        ]);
+
+        $log = MessageLog::where('message_id', $validated['tempMessageId'])->first();
+
+        if ($log) {
+            $log->update([
+                'status' => 'failed',
+                'failure_reason' => $validated['reason'], // Save the error
+            ]);
+            Log::warning("Message failed to send (gateway error): {$validated['tempMessageId']}. Reason: {$validated['reason']}");
+            
+            // **NEW: Increment failure count on parent models**
+            if ($log->campaign_id) {
+                \App\Models\Campaign::find($log->campaign_id)?->increment('failed_count');
+            } elseif ($log->scheduled_message_id) {
+                \App\Models\ScheduledMessage::find($log->scheduled_message_id)?->increment('failed_count');
+            }
         }
 
         return response()->json(['status' => 'success']);

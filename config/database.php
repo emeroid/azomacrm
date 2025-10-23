@@ -152,6 +152,7 @@ return [
         ],
 
         'default' => [
+            'client' => env('REDIS_CLIENT', 'phpredis'),
             'url' => env('REDIS_URL'),
             'host' => env('REDIS_HOST', '127.0.0.1'),
             'username' => env('REDIS_USERNAME'),
@@ -169,6 +170,14 @@ return [
             'database' => env('REDIS_CACHE_DB', '1'),
         ],
 
+        'pubsub' => [
+            'url' => env('REDIS_URL'),
+            'host' => env('REDIS_HOST', '127.0.0.1'),
+            'password' => env('REDIS_PASSWORD', null),
+            'port' => env('REDIS_PORT', 6379),
+            'database' => env('REDIS_DB', '0'),
+            // CRUCIAL: No 'options' section to inherit the prefix
+        ],
     ],
 
 ];

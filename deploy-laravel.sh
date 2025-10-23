@@ -28,7 +28,7 @@ npm ci || npm install
 npm run build
 
 # reload services
-systemctl reload php8.3-fpm || true
-systemctl reload nginx || true
+# systemctl reload php8.3-fpm || true
+# systemctl reload nginx || true
 
 echo "Laravel deploy finished."

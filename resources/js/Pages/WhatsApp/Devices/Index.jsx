@@ -236,6 +236,19 @@ export default function Index({ auth, devices }) {
                                                 </div>
 
                                                 <div className="flex space-x-3">
+                                                    {/* NEW: Edit Settings Button */}
+                                                    <Link
+                                                        href={route('devices.edit', { id: device.id })}
+                                                        className="flex-1 px-4 py-2 text-sm font-semibold rounded-lg shadow-sm transition-all duration-200 flex items-center justify-center space-x-2 bg-yellow-500 text-white hover:bg-yellow-600"
+                                                        title="Edit device name and settings"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-7 1l1.686-1.686a2 2 0 012.828 0l1.686 1.686m-6.4 0L17 10.6l-3.3-3.3a2 2 0 00-2.828 0L8.2 11.2a2 2 0 000 2.828l3.3 3.3z"></path>
+                                                        </svg>
+                                                        <span>Edit Settings</span>
+                                                    </Link>
+
+                                                    {/* Existing: Send Campaign Link (keep this, but adjust flex-1) */}
                                                     <Link
                                                         href={route('campaigns.create', { session_id: device.session_id })}
                                                         className={`flex-1 px-4 py-2 text-sm font-semibold rounded-lg shadow-sm transition-all duration-200 flex items-center justify-center space-x-2 ${

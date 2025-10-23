@@ -236,4 +236,12 @@ class Order extends Model
             }
         });
     }
+
+    /**
+     * Alias for full_name to match common placeholder naming
+     */
+    public function getCustomerNameAttribute() 
+    {
+        return $this->full_name;
+    }
 }

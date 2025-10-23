@@ -20,53 +20,6 @@ class WhatsAppDeviceController extends Controller
         ]);
     }
 
-    // public function startSession()
-    // {
-
-    //     // Check if there's already an existing un-connected device for the user and use that session ID if available
-    //     $existingDevice = auth()->user()->whatsappDevices()
-    //         ->where('status', '!=', 'connected')
-    //         ->first();
-
-    //     if ($existingDevice) {
-    //         $sessionId = $existingDevice->session_id;
-    //         // Optionally: Check if the session is still active on the gateway, re-start if needed
-
-    //         $this->wormServer($sessionId);
-
-    //     } else {
-    //         $sessionId = 'user-' . auth()->id() . '-' . Str::random(10);
-    //         $response = $this->wormServer($sessionId);
-    //         if ($response->successful() || $response->status() === 202) {
-    //             // 2. Save the new device to the DB
-    //             auth()->user()->whatsappDevices()->create([
-    //                 'session_id' => $sessionId,
-    //                 'status' => 'pending-qr',
-    //                 'qr_code_url' => null,
-    //             ]);
-    //         } else {
-    //             return redirect()->route('devices.index')->withErrors(['gateway' => 'Could not connect to the WhatsApp Gateway. Please try again later.']);
-    //         }
-    //     }
-
-    //     // 3. Redirect to the dedicated status page which will handle the polling
-    //     return redirect()->route('devices.status', ['sessionId' => $sessionId]);
-    // }
-
-
-    // // The new Inertia page that is responsible for showing status and polling
-    // public function showStatus(string $sessionId)
-    // {
-    //     $device = auth()->user()->whatsappDevices()
-    //         ->where('session_id', $sessionId)
-    //         ->firstOrFail();
-
-    //     return Inertia::render('WhatsApp/Devices/Create', [
-    //         'sessionId' => $device->session_id,
-    //         'device' => $device->toArray(), // Pass the device data
-    //     ]);
-    // }
-
     public function startSession()
     {
         // Find or create a device record in a 'disconnected' state.
@@ -115,6 +68,23 @@ class WhatsAppDeviceController extends Controller
         return response()->json($device->toArray());
     }
 
+    public function toggleAutoResponders(Request $request, WhatsappDevice $device)
+    {
+        // $this->authorize('update', $device);
+
+        $isEnabled = $request->input('enabled', false);
+        $device->update(['auto_responder_enabled' => $isEnabled]);
+
+        // **Tell Redis about this change**
+        \Illuminate\Support\Facades\Redis::hSet(
+            'device_settings',
+            $device->session_id,
+            json_encode(['autoResponder' => $isEnabled])
+        );
+
+        return back()->with('success', 'Auto-responder settings updated.');
+    }
+
     /**
      * Helper to call the gateway with the API key.
      */
@@ -127,17 +97,41 @@ class WhatsAppDeviceController extends Controller
             ->post("{$gatewayUrl}{$endpoint}", $data);
     }
 
-
-    public function renameDevice(Request $request, WhatsappDevice $device)
+    public function edit(WhatsappDevice $device)
     {
-        $validated = $request->validate([
-            'name' => 'required|string'
+        // Ensure the device belongs to the authenticated user
+        if (auth()->id() !== $device->user_id) {
+            abort(403);
+        }
+
+        return Inertia::render('WhatsApp/Devices/Edit', [
+            'device' => $device,
+        ]);
+    }
+
+    public function update(Request $request, WhatsappDevice $device)
+    {
+        // Ensure the device belongs to the authenticated user
+        if (auth()->id() !== $device->user_id) {
+            abort(403);
+        }
+
+        // Validate the incoming request data
+        $validatedData = $request->validate([
+            'name' => 'nullable|string|max:255',
+            'min_delay' => 'required|integer|min:1',
+            'max_delay' => 'required|integer|min:' . $request->input('min_delay', 1), // max must be >= min
         ]);
 
-        $device->name = $validated['name'];
-        $device->save();
+        // Update only the fields that are fillable/editable
+        $device->update([
+            'name' => $validatedData['name'],
+            'min_delay' => $validatedData['min_delay'],
+            'max_delay' => $validatedData['max_delay'],
+        ]);
 
-        return redirect()->back()->with('success', 'Device Name updated successfully');
+        // Redirect back to the index page with a success message
+        return redirect()->route('devices.index')->with('success', 'Device settings updated successfully!');
     }
 
     /**

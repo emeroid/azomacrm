@@ -64,6 +64,9 @@ Route::middleware('auth')->group(function () {
     Route::prefix('campaigns')->group(function () {
         Route::get('/create', [CampaignController::class, 'create'])->name('campaigns.create');
         Route::post('/store', [CampaignController::class, 'store'])->name('campaigns.store');
+        Route::get('/', [CampaignController::class, 'index'])->name('campaigns.index');
+        Route::post('/{campaign}/pause', [CampaignController::class, 'pause'])->name('campaigns.pause');
+        Route::post('/{campaign}/resume', [CampaignController::class, 'resume'])->name('campaigns.resume');
     });
 
     // This creates routes for index, create, and destroy
@@ -74,6 +77,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/devices/link', [WhatsAppDeviceController::class, 'startSession'])->name('devices.start'); // New route for starting the process
     Route::get('/devices/{sessionId}/status', [WhatsAppDeviceController::class, 'showStatus'])->name('devices.status');
     Route::get('/devices/{sessionId}/get-status', [WhatsAppDeviceController::class, 'getDeviceStatus'])->name('devices.get-status');
+    Route::get('/devices/{device}/edit', [WhatsappDeviceController::class, 'edit'])->name('devices.edit');
+    Route::put('/devices/{device}', [WhatsappDeviceController::class, 'update'])->name('devices.update');
+
 });
 
 // Form Templates Routes
@@ -112,6 +118,8 @@ Route::prefix('webhook')->group(function () {
     Route::post('/message', [WebhookController::class, 'handleIncomingMessage']);
     Route::post('/message-status-update', [WebhookController::class, 'handleMessageStatusUpdate']);
     Route::post('/qr-timeout', [WebhookController::class, 'handleQrTimeout']);
+    Route::post('/message-sent', [WebhookController::class, 'handleMessageSent']);
+    Route::post('/message-failed', [WebhookController::class, 'handleMessageFailed']);
 });
 
 Route::prefix('auto-responder')->group(function () {
@@ -125,6 +133,9 @@ Route::prefix('scheduler')->group(function () {
     Route::post('/store', [MessageSchedulerController::class, 'store'])->name('scheduler.store');
     Route::delete('/delete', [MessageSchedulerController::class, 'destroy'])->name('scheduler.delete');
     Route::get('/check-form-fields/{templateId}', [MessageSchedulerController::class, 'getPotentialWhatsappFields'])->name('scheduler.potential-fields');
+    Route::get('/order-search', [MessageSchedulerController::class, 'destroy'])->name('scheduler.search-orders');
+    Route::get('/submissions-search', [MessageSchedulerController::class, 'destroy'])->name('scheduler.search-submissions');
+
 });
 
 

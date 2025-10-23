@@ -2,14 +2,15 @@
 
 namespace App\Jobs;
 
+use App\Models\Campaign;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Http;
 use App\Models\MessageLog;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Redis; // **Import Redis**
 
 class SendSingleWhatsappMessage implements ShouldQueue
 {
@@ -18,12 +19,11 @@ class SendSingleWhatsappMessage implements ShouldQueue
     protected string $sessionId;
     protected string $phoneNumber;
     protected string $message;
+    protected ?string $mediaUrl;
     protected int $userId;
     protected ?int $campaignId;
     protected ?int $scheduledMessageId;
     protected ?int $autoResponderLogId;
-
-    private const HTTP_TIMEOUT_SECONDS = 90;
 
     /**
      * Create a new job instance.
@@ -32,6 +32,7 @@ class SendSingleWhatsappMessage implements ShouldQueue
         string $sessionId, 
         string $phoneNumber, 
         string $message, 
+        ?string $mediaUrl,
         int $userId,
         ?int $campaignId,
         ?int $scheduledMessageId,
@@ -41,6 +42,7 @@ class SendSingleWhatsappMessage implements ShouldQueue
         $this->sessionId = $sessionId;
         $this->phoneNumber = $phoneNumber;
         $this->message = $message;
+        $this->mediaUrl = $mediaUrl;
         $this->userId = $userId;
         $this->campaignId = $campaignId;
         $this->scheduledMessageId = $scheduledMessageId;
@@ -52,54 +54,61 @@ class SendSingleWhatsappMessage implements ShouldQueue
      */
     public function handle(): void
     {
-        // For simplicity, we assume we can infer the user ID or that it's handled upstream.
-        $log = MessageLog::create([
-                'user_id' => $this->userId,
-                'message_id' => 'temp-' . \Illuminate\Support\Str::uuid(),
-                'session_id' => $this->sessionId,
-                'recipient_number' => $this->phoneNumber,
-                'message' => $this->message,
-                'status' => 'processing',
-                'sent_at' => null,
-                'campaign_id' => $this->campaignId,
-                'scheduled_message_id' => $this->scheduledMessageId,
-                'auto_responder_log_id' => $this->autoResponderLogId,
-            ]);
+        if ($this->campaignId) {
+            $campaign = Campaign::find($this->campaignId);
 
-        try {
-
-            $response = Http::timeout(90)
-                // NEW: Add the required API Key for security
-                ->withHeaders(['X-API-KEY' => config('services.whatsapp.api_key')])
-                ->post(config('services.whatsapp.gateway_url') . '/messages/send', [
-                    'sessionId' => $this->sessionId,
-                    'to' => $this->phoneNumber,
-                    'message' => $this->message,
-                ]);
-
-            $data = $response->json();
-
-            if ($response->successful() && $data['success']) {
-                // STEP 2: Update the log with the real message ID from the gateway.
-                // The status is 'queued' because the gateway has accepted it.
-                // The webhook will later update it to 'sent', 'delivered', etc.
-                $log->update([
-                    'message_id' => $data['id'],
-                    'status' => 'queued',
-                ]);
-            } else {
-                // Throw an exception to trigger Laravel's retry mechanism
-                throw new \Exception('Gateway failed to send message: ' . ($data['error'] ?? 'Unknown error'));
+            // If the campaign is paused, re-queue this job for 5 minutes from now.
+            // The job will run again and re-check the status.
+            if ($campaign && $campaign->status === 'paused') {
+                $this->release(300); // 300 seconds = 5 minutes
+                return; // Stop execution
             }
 
-        } catch (\Exception $e) {
-            Log::error("HTTP connection failed to gateway for {$this->phoneNumber}: " . $e->getMessage());
+            // If the campaign was cancelled, just fail the job silently.
+            if ($campaign && $campaign->status === 'cancelled') {
+                $this->fail(new \Exception('Campaign was cancelled.'));
+                return; // Stop execution
+            }
+        }
 
-            // STEP 3: If all retries fail, this block will be executed.
+        // Create a log entry. The status is 'queued' because we are about to hand it off.
+        $log = MessageLog::create([
+            'user_id' => $this->userId,
+            'message_id' => 'temp-' . \Illuminate\Support\Str::uuid(), // A temporary ID
+            'session_id' => $this->sessionId,
+            'recipient_number' => $this->phoneNumber,
+            'message' => $this->message,
+            // 'media_url' => $this->mediaUrl,
+            'status' => 'queued', // The job is queued for sending
+            'sent_at' => null,
+            'campaign_id' => $this->campaignId,
+            'scheduled_message_id' => $this->scheduledMessageId,
+            'auto_responder_log_id' => $this->autoResponderLogId,
+        ]);
+
+        try {
+            // Prepare the payload for the Node.js worker
+            $payload = json_encode([
+                'sessionId' => $this->sessionId,
+                'to' => $this->phoneNumber,
+                'message' => $this->message,
+                'mediaUrl' => $this->mediaUrl,
+                'tempMessageId' => $log->message_id, // **Pass the temporary ID**
+            ]);
+
+            // Publish the job to the Redis Pub/Sub channel and finish.
+            // This is a "fire-and-forget" operation and is extremely fast.
+            Log::info('Attempting to publish to Redis. Payload: ' . $payload);
+            Redis::connection('pubsub')->publish('whatsapp:send_queue', $payload);
+
+        } catch (\Exception $e) {
+            Log::error("Failed to publish message to Redis for {$this->phoneNumber}: " . $e->getMessage());
+
+            // If we can't even publish to Redis, mark the log as failed.
             $log->update(['status' => 'failed']);
             $this->updateParentFailureCount();
 
-            // Re-throw the exception to mark the job as officially failed.
+            // Re-throw the exception to let Laravel's queue system handle retries.
             $this->fail($e);
         }
     }

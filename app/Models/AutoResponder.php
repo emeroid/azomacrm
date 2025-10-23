@@ -10,7 +10,9 @@ class AutoResponder extends Model
         'user_id', 
         'keyword', 
         'response_message', 
-        'hit_count'
+        'hit_count',
+        'match_type',
+        'reply_condition',
     ];
 
     public function user() {
