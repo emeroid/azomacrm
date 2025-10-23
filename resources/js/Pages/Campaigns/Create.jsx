@@ -183,7 +183,7 @@ export default function CreateCampaign({ auth, devices, recentCampaigns }) {
                                             {devices.length > 0 ? (
                                                 devices.map(device => (
                                                     <option key={device.id} value={device.session_id}>
-                                                        {device.name} ({device.session_id})
+                                                        {device.name} ({device.phone_number})
                                                     </option>
                                                 ))
                                             ) : (

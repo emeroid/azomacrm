@@ -385,7 +385,7 @@ export default function Index({ auth, messages, devices, orderStatuses, userForm
                                             <option value="">Select a Device</option>
                                             {devices && devices.map(device => (
                                                 <option key={device.id} value={device.id}>
-                                                    {device.name} (+{device.session_id})
+                                                    {device.name} (+{device.phone_number})
                                                 </option>
                                             ))}
                                         </select>
