@@ -6,6 +6,7 @@ use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use App\Models\WhatsappDevice;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
 class WhatsAppDeviceController extends Controller
@@ -122,16 +123,21 @@ class WhatsAppDeviceController extends Controller
             'min_delay' => 'required|integer|min:1',
             'max_delay' => 'required|integer|min:' . $request->input('min_delay', 1), // max must be >= min
         ]);
+        
+        try{
+            // Update only the fields that are fillable/editable
+            $device->update([
+                'name' => $validatedData['name'],
+                'min_delay' => $validatedData['min_delay'],
+                'max_delay' => $validatedData['max_delay'],
+            ]);
 
-        // Update only the fields that are fillable/editable
-        $device->update([
-            'name' => $validatedData['name'],
-            'min_delay' => $validatedData['min_delay'],
-            'max_delay' => $validatedData['max_delay'],
-        ]);
+            // Redirect back to the index page with a success message
+            return redirect()->route('devices.index')->with('success', 'Device settings updated successfully!');
+        } catch (\Exception $e) {
 
-        // Redirect back to the index page with a success message
-        return redirect()->route('devices.index')->with('success', 'Device settings updated successfully!');
+            return redirect()->back()->with('error', 'Failed to update device, please try again later!');
+        }
     }
 
     /**
@@ -143,14 +149,23 @@ class WhatsAppDeviceController extends Controller
         // $this->authorize('delete', $device);
         
         $gatewayUrl = config('services.whatsapp.gateway_url');
+        try {
+            // Tell the gateway to terminate the session (async)
+            Http::post("{$gatewayUrl}/sessions/logout", [
+                'sessionId' => $device->session_id,
+            ])->throw();
 
-        // Tell the gateway to terminate the session (async)
-        Http::post("{$gatewayUrl}/sessions/logout", [
-            'sessionId' => $device->session_id,
-        ])->throw();
+            $device->delete();
 
-        $device->delete();
+            return redirect()->route('devices.index')->with('success', 'Device has been disconnected successfully.');
 
-        return redirect()->route('devices.index')->with('success', 'Device has been disconnected successfully.');
+        } catch(\Exception $e) {
+            Log::error("Error Removing Device: ", [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return redirect()->back()->with('error', 'Failed to delete device. ' . $e->getMessage());
+        }
     }
 }

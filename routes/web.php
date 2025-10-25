@@ -128,13 +128,15 @@ Route::prefix('auto-responder')->group(function () {
     Route::delete('/delete', [AutoResponderController::class, 'destroy'])->name('auto-responders.delete');
 });
 
-Route::prefix('scheduler')->group(function () {
-    Route::get('/', [MessageSchedulerController::class, 'index'])->name('scheduler.index');
-    Route::post('/store', [MessageSchedulerController::class, 'store'])->name('scheduler.store');
-    Route::delete('/delete', [MessageSchedulerController::class, 'destroy'])->name('scheduler.delete');
-    Route::get('/check-form-fields/{templateId}', [MessageSchedulerController::class, 'getPotentialWhatsappFields'])->name('scheduler.potential-fields');
-    Route::get('/order-search', [MessageSchedulerController::class, 'destroy'])->name('scheduler.search-orders');
-    Route::get('/submissions-search', [MessageSchedulerController::class, 'destroy'])->name('scheduler.search-submissions');
+Route::prefix('schedulers')->group(function () {
+    Route::get('/', [MessageSchedulerController::class, 'index'])->name('schedulers.index');
+    Route::get('/create', [MessageSchedulerController::class, 'create'])->name('schedulers.create');
+    Route::post('/store', [MessageSchedulerController::class, 'store'])->name('schedulers.store');
+    Route::delete('/delete', [MessageSchedulerController::class, 'destroy'])->name('schedulers.delete');
+    Route::get('/check-form-fields/{templateId}', [MessageSchedulerController::class, 'getPotentialWhatsappFields'])->name('schedulers.potential-fields');
+
+    Route::get('/order-search', [MessageSchedulerController::class, 'getSearchableOrders'])->name('schedulers.search-orders');
+    Route::get('/submissions-search', [MessageSchedulerController::class, 'getSearchableSubmissions'])->name('schedulers.search-submissions');
 
 });
 

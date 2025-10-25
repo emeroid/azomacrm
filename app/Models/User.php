@@ -127,4 +127,8 @@ class User extends Authenticatable implements FilamentUser
     public function campaigns() {
         return $this->hasMany(Campaign::class);
     }
+    
+    public function orders() {
+        return $this->hasMany(Order::class);
+    }
 }

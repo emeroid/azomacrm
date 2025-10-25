@@ -4,6 +4,7 @@ import { Dropdown } from '@/Components/Dropdown';
 import { NavLink } from '@/Components/NavLink';
 import { useState } from 'react';
 import { ResponsiveNavLink } from '@/Components/NavLink';
+import ToastMessages from '@/Components/ToastMessages';
 
 export default function AuthenticatedLayout({ auth, header, children }) {
     const [showingNavigationDropdown, setShowingNavigationDropdown] = useState(false);
@@ -133,6 +134,7 @@ export default function AuthenticatedLayout({ auth, header, children }) {
                     )}
                     {children}
                 </div>
+                <ToastMessages />
             </main>
         </div>
     );

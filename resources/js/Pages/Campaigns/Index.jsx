@@ -7,11 +7,11 @@ export default function CampaignHistory({ auth, campaigns }) {
     const { post } = useForm();
 
     const handlePause = (campaignId) => {
-        post(route('campaigns.pause', campaignId));
+        post(route('campaigns.pause', {campaign: campaignId}));
     };
 
     const handleResume = (campaignId) => {
-        post(route('campaigns.resume', campaignId));
+        post(route('campaigns.resume', {campaign: campaignId}));
     };
 
     const getStatusBadge = (campaign) => {

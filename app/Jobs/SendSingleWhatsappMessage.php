@@ -78,7 +78,7 @@ class SendSingleWhatsappMessage implements ShouldQueue
             'session_id' => $this->sessionId,
             'recipient_number' => $this->phoneNumber,
             'message' => $this->message,
-            // 'media_url' => $this->mediaUrl,
+            'media_url' => $this->mediaUrl,
             'status' => 'queued', // The job is queued for sending
             'sent_at' => null,
             'campaign_id' => $this->campaignId,

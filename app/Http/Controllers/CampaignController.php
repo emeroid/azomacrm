@@ -105,22 +105,26 @@ class CampaignController extends Controller
             $campaign->id
         )->onQueue('whatsapp-broadcasts');
 
-        return redirect()->back()->with('success', 'Campaign has been queued successfully!');
+        return redirect()->route('campaigns.index')->with('success', 'Campaign has been queued successfully!');
     }
 
     public function pause(Campaign $campaign)
     {
         // Add authorization logic here to ensure user owns this campaign
         
-        $campaign->update(['status' => 'paused']);
-        return response()->json(['message' => 'Campaign paused.']);
+        $campaign->status = 'paused';
+        $campaign->save();
+
+        return redirect()->back()->with("success", "Campaign Paused Successfully!");
     }
 
     public function resume(Campaign $campaign)
     {
         // Add authorization logic here
-        
-        $campaign->update(['status' => 'running']);
-        return response()->json(['message' => 'Campaign resumed.']);
+        $campaign->status = 'running';
+        $campaign->save();
+
+        // $campaign->update(['status' => 'running']);
+        return redirect()->back()->with("success", "Campaign Resumed Successfully!");
     }
 }

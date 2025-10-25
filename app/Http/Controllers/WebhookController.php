@@ -340,6 +340,8 @@ class WebhookController extends Controller
             'tempMessageId' => 'required|string|exists:message_logs,message_id',
             'sessionId' => 'required|string',
             'reason' => 'required|string',
+            'errorCode' => 'nullable|string', // **NEW**
+            'friendlyError' => 'nullable|string', // **NEW**
         ]);
 
         $log = MessageLog::where('message_id', $validated['tempMessageId'])->first();
@@ -348,7 +350,10 @@ class WebhookController extends Controller
             $log->update([
                 'status' => 'failed',
                 'failure_reason' => $validated['reason'], // Save the error
+                'failure_code' => $validated['errorCode'], // **NEW**
+                'friendly_error' => $validated['friendlyError'], // **NEW**
             ]);
+            
             Log::warning("Message failed to send (gateway error): {$validated['tempMessageId']}. Reason: {$validated['reason']}");
             
             // **NEW: Increment failure count on parent models**

@@ -247,7 +247,7 @@ export default function AnalyticsIndex({ auth, analyticsData }) {
                             <option value="month">This Month</option>
                         </select>
                         <Link 
-                            href={route('scheduler.index')} 
+                            href={route('schedulers.index')} 
                             className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                         >
                             View Scheduler
@@ -274,7 +274,7 @@ export default function AnalyticsIndex({ auth, analyticsData }) {
                             <NavCard 
                                 title="Message Scheduler"
                                 description="Schedule automated messages"
-                                href={route('scheduler.index')}
+                                href={route('schedulers.index')}
                                 color="border-indigo-500"
                                 icon={icons.schedule}
                             />
@@ -495,7 +495,7 @@ export default function AnalyticsIndex({ auth, analyticsData }) {
 //                     </div>
 //                     <div className="flex space-x-3 mt-4 sm:mt-0">
 //                         <Link 
-//                             href={route('scheduler.index')} 
+//                             href={route('schedulers.index')} 
 //                             className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
 //                         >
 //                             View Scheduler
@@ -522,7 +522,7 @@ export default function AnalyticsIndex({ auth, analyticsData }) {
 //                             <NavCard 
 //                                 title="Message Scheduler"
 //                                 description="Schedule automated messages"
-//                                 href={route('scheduler.index')}
+//                                 href={route('schedulers.index')}
 //                                 color="border-indigo-500"
 //                                 icon={<svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>}
 //                             />

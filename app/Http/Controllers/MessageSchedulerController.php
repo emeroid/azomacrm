@@ -35,7 +35,19 @@ class MessageSchedulerController extends Controller
         return Inertia::render('Scheduler/Index', [
             // Assuming your User model has a hasMany(ScheduledMessage::class) relationship
             'messages' => auth()->user()->scheduledMessages()->get(), 
-            
+
+            // Data needed for the frontend to build the form
+            'orderStatuses' => Order::getStatuses(),
+            'userFormTemplates' => auth()->user()->formTemplates()->userForms(auth()->id())->get(['id', 'name']),
+            'devices' => auth()->user()->whatsappDevices()->where('status', 'connected')->get(['id', 'name', 'session_id']),
+            'supportedPlaceholders' => self::SUPPORTED_PLACEHOLDERS,
+
+        ]);
+    }
+
+    public function create()
+    {
+        return Inertia::render('Scheduler/Create', [              
             // Data needed for the frontend to build the form
             'orderStatuses' => Order::getStatuses(),
             'userFormTemplates' => auth()->user()->formTemplates()->userForms(auth()->id())->get(['id', 'name']),
@@ -80,8 +92,8 @@ class MessageSchedulerController extends Controller
                 'required_if:order_criteria_type,SPECIFIC_ORDER',
                 Rule::exists('orders', 'id')->where(function ($query) use ($request) {
                     // Check if the order belongs to the user AND has the selected status
-                    return $query->where('user_id', auth()->id())
-                                 ->where('status', $request->input('status'));
+                    // return $query->where('marketer_id', auth()->id())
+                                 // ->where('status', $request->input('status'));
                 }),
             ];
             
@@ -157,7 +169,7 @@ class MessageSchedulerController extends Controller
             // sent_count and failed_count are now dynamic (will be set to 0 by default)
         ]);
 
-        return redirect()->route('scheduler.index')->with('success', 'Message scheduled successfully!');
+        return redirect()->route('schedulers.index')->with('success', 'Message scheduled successfully!');
     }
     
     // -------------------------------------------------------------------------
@@ -204,8 +216,8 @@ class MessageSchedulerController extends Controller
         $status = $request->input('status');
         $search = $request->input('search');
 
-        $orders = auth()->user()->orders()
-            ->where('status', $status)
+        $orders = Order::where('status', $status)
+            ->where('marketer_id', auth()->id())
             ->when($search, function ($query, $search) {
                 // Search by Order Number or Customer Name
                 $query->where('order_number', 'like', "%{$search}%")
@@ -335,7 +347,7 @@ class MessageSchedulerController extends Controller
     //         'failed_count' => 0 // Will be gotten dynamically
     //     ]);
 
-    //     return redirect()->route('scheduler.index')->with('success', 'Message scheduled successfully!');
+    //     return redirect()->route('schedulers.index')->with('success', 'Message scheduled successfully!');
     // }
     
     // // ... (index and destroy methods remain similar, but target ScheduledMessage model)
