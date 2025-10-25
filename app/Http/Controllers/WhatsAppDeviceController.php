@@ -123,7 +123,7 @@ class WhatsAppDeviceController extends Controller
             'min_delay' => 'required|integer|min:1',
             'max_delay' => 'required|integer|min:' . $request->input('min_delay', 1), // max must be >= min
         ]);
-        
+
         try{
             // Update only the fields that are fillable/editable
             $device->update([
@@ -151,9 +151,10 @@ class WhatsAppDeviceController extends Controller
         $gatewayUrl = config('services.whatsapp.gateway_url');
         try {
             // Tell the gateway to terminate the session (async)
-            Http::post("{$gatewayUrl}/sessions/logout", [
-                'sessionId' => $device->session_id,
-            ])->throw();
+            Http::withHeaders(['X-API-KEY' => config('services.whatsapp.api_key')])
+                ->post("{$gatewayUrl}/sessions/logout", [
+                    'sessionId' => $device->session_id,
+                ])->throw();
 
             $device->delete();
 
