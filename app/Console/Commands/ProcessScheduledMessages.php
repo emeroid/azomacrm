@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Jobs\SendSingleWhatsappMessage; // Updated to use the single message job
+use App\Jobs\SendSingleWhatsappMessage;
 use App\Models\FormSubmission;
 use App\Models\Order;
 use App\Models\ScheduledMessage;
@@ -12,23 +12,9 @@ use Illuminate\Support\Facades\Http;
 
 class ProcessScheduledMessages extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
     protected $signature = 'whatsapp:process-scheduled';
-
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
     protected $description = 'Processes and sends scheduled WhatsApp messages with dynamic data.';
 
-    /**
-     * Execute the console command.
-     */
     public function handle()
     {
         $messages = ScheduledMessage::where('send_at', '<=', now())
@@ -37,48 +23,62 @@ class ProcessScheduledMessages extends Command
 
         foreach ($messages as $message) {
             
+            $device = $message->device;
+            if (!$device) {
+                $this->error("No device found for scheduled message ID: {$message->id}");
+                continue;
+            }
+            
             // 1. Warm-up WhatsApp session
             Http::withHeaders(['X-API-KEY' => config('services.whatsapp.api_key')])
-            ->post(config('services.whatsapp.gateway_url') . '/sessions/start', [
-                'sessionId' => $message->device->session_id,
-            ]);
+                ->post(config('services.whatsapp.gateway_url') . '/sessions/start', [
+                    'sessionId' => $device->session_id,
+                ]);
 
             $targets = $this->getTargetModels($message);
-            $successfullyDispatched = false;
-            
-            // 2. Iterate through specific targets and dispatch a customized message
-            foreach ($targets as $target) {
-                // Determine the recipient number
-                $recipientNumber = $this->getRecipientNumber($message, $target);
+            if ($targets->isEmpty()) {
+                $this->warn("No targets found for scheduled message ID: {$message->id}");
+                continue;
+            }
 
+            // **HUMAN-LIKE DELAY LOGIC (Borrowed from your anti-ban job)**
+            $minDelay = $device->min_delay ?? 25;
+            $maxDelay = $device->max_delay ?? 60;
+            $cumulativeDelay = 0;
+            
+            $this->info("Processing {$targets->count()} targets for message ID: {$message->id} with human-like delays...");
+            
+            foreach ($targets as $target) {
+                $recipientNumber = $this->getRecipientNumber($message, $target);
                 if (!$recipientNumber) {
+                    $this->warn("Skipping target ID {$target->id} - no phone number.");
                     continue; 
                 }
 
-                // Resolve placeholders using the target model's data
                 $resolvedMessage = $this->resolvePlaceholders($message->message, $target);
 
-                // Dispatch Sending Job for the single, resolved message
+                // **NEW: Apply a random, cumulative delay to each job**
+                $randomDelay = rand($minDelay, $maxDelay);
+                $cumulativeDelay += $randomDelay;
+
                 SendSingleWhatsappMessage::dispatch(
-                    $message->device->session_id,
+                    $device->session_id,
                     $recipientNumber, 
-                    $resolvedMessage, // <-- THIS IS NOW THE RESOLVED MESSAGE
-                    $message->media_url ?? '',
-                    $message->device->user_id,
+                    $resolvedMessage,
+                    $message->media_url ?? null, // <-- FIX: Use null, not '', for ?string
+                    $device->user_id,
                     null,                       
                     $message->id,               
                     null
-                )->onQueue('whatsapp-broadcasts');
-
-                $successfullyDispatched = true;
+                )->onQueue('whatsapp-broadcasts')->delay(now()->addSeconds($cumulativeDelay));
             }
 
-            // 3. Mark the ScheduledMessage as sent only if we had recipients to send to
-            if ($successfullyDispatched) {
-                $message->update(['sent_at' => now()]);
-            }
+            // Mark the main schedule as sent
+            $message->update(['sent_at' => now()]);
+            $this->info("All jobs for message ID: {$message->id} have been dispatched.");
         }
     }
+    
     
     /**
      * Retrieves the target models (Orders or Submissions) based on criteria.

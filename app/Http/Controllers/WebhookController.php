@@ -183,83 +183,164 @@ class WebhookController extends Controller
     
     /**
      * Handle updates to a message's status (sent, delivered, read).
-     */
+    */
+
     public function handleMessageStatusUpdate(Request $request)
     {
         $validated = $request->validate([
-            // Use exists validation to ensure the message_id is one we are tracking
             'messageId' => 'required|string', 
-            'sessionId' => 'required|string|exists:whatsapp_devices,session_id', // Good for cross-reference
-            'status' => 'required|string|in:sent,delivered,read,failed', // Added 'failed'
+            'sessionId' => 'required|string|exists:whatsapp_devices,session_id',
+            'status' => 'required|string|in:sent,delivered,read,failed',
             'timestamp' => 'required|date',
         ]);
 
         $log = MessageLog::where('message_id', $validated['messageId'])->first();
 
         if ($log) {
-            $updateData = [
-                'status' => $validated['status'],
-            ];
+            // --- Status Hierarchy (Your existing logic is good) ---
+            $statusOrder = ['queued' => 0, 'sent' => 1, 'delivered' => 2, 'read' => 3, 'failed' => 4];
+            $currentStatusLevel = $statusOrder[$log->status] ?? 0;
+            $newStatusLevel = $statusOrder[$validated['status']] ?? 0;
 
-            // Set the appropriate timestamp column based on the status
+            if ($newStatusLevel < $currentStatusLevel) {
+                Log::info("Ignoring stale status update for {$log->message_id}.");
+                return response()->json(['status' => 'ignored_stale_update']);
+            }
+            
+            $updateData = ['status' => $validated['status']];
+
+            // --- SIMPLIFIED LOGIC ---
+            // We only care about setting timestamps.
+            // The 'sent' timestamp is now set by handleMessageSent.
             switch ($validated['status']) {
-                case 'sent':
-                    // We only update if it was previously not sent (e.g., 'attempted')
-                    if (!$log->sent_at) {
-                        $updateData['sent_at'] = $validated['timestamp'];
-                    }
-                    break;
                 case 'delivered':
-                    if (!$log->delivered_at) {
-                        $updateData['delivered_at'] = $validated['timestamp'];
-                    }
+                    if (!$log->delivered_at) $updateData['delivered_at'] = $validated['timestamp'];
                     break;
                 case 'read':
-                    if (!$log->read_at) {
-                        $updateData['read_at'] = $validated['timestamp'];
-                    }
+                    if (!$log->read_at) $updateData['read_at'] = $validated['timestamp'];
                     break;
                 case 'failed':
-                    // We might not have a specific 'failed_at' column, so we just set the status
+                    // This is a safety net. handleMessageFailed should catch most.
                     break;
             }
             
             $log->update($updateData);
-            Log::info("Message status updated: {$validated['messageId']} to {$validated['status']}");
+            Log::info("Message status updated: {$log->message_id} to {$validated['status']}");
 
-            if ($log->campaign_id) {
-                // This is a Campaign message
-                $campaign = $log->campaign;
-                if ($validated['status'] === 'sent' && $campaign->sent_count <= $campaign->total_recipients) {
-
-                    $campaign->increment('sent_count');
-                } elseif ($validated['status'] === 'delivered') {
-                    // Update only if you track delivered specifically. Be careful not to double count!
-                } elseif ($validated['status'] === 'failed') {
-                    $campaign->increment('failed_count');
-                }
-            } elseif ($log->scheduled_message_id) {
-                // This is a Scheduled Message
-                $scheduledMessage = $log->scheduledMessage;
-                if ($validated['status'] === 'sent') {
-                    $scheduledMessage->increment('sent_count');
-                } elseif ($validated['status'] === 'failed') {
-                    $scheduledMessage->increment('failed_count');
+            // --- Analytics for FAILED status (if it comes from here) ---
+            if ($validated['status'] === 'failed' && $log->analytics_processed === false) {
+                
+                if ($log->campaign_id) {
+                    $log->campaign?->increment('failed_count');
+                    $log->update(['analytics_processed' => true]);
+                
+                } elseif ($log->scheduled_message_id) {
+                    $log->scheduledMessage?->increment('failed_count');
+                    $log->update(['analytics_processed' => true]);
                 }
             }
 
-            // If this message was from an auto-responder, update the parent log too.
+            // Auto-responder log (your existing logic is fine)
             if ($log->auto_responder_log_id) {
-                $autoLog = \App\Models\AutoResponderLog::find($log->auto_responder_log_id);
-                if ($autoLog) {
-                    // Keep the auto-log status in sync with the message log
-                    $autoLog->update(['status' => $validated['status']]);
-                }
+                \App\Models\AutoResponderLog::find($log->auto_responder_log_id)
+                    ?->update(['status' => $validated['status']]);
             }
         }
 
         return response()->json(['status' => 'ok']);
     }
+    // public function handleMessageStatusUpdate(Request $request)
+    // {
+    //     $validated = $request->validate([
+    //         'messageId' => 'required|string', 
+    //         'sessionId' => 'required|string|exists:whatsapp_devices,session_id',
+    //         'status' => 'required|string|in:sent,delivered,read,failed',
+    //         'timestamp' => 'required|date',
+    //     ]);
+
+    //     $log = MessageLog::where('message_id', $validated['messageId'])->first();
+
+    //     if ($log) {
+    //         // **NEW: Define a status hierarchy**
+    //         $statusOrder = [
+    //             'queued' => 0,
+    //             'sent' => 1,
+    //             'delivered' => 2,
+    //             'read' => 3,
+    //             'failed' => 4, // 'failed' is a high-priority, final state
+    //         ];
+
+    //         $currentStatusLevel = $statusOrder[$log->status] ?? 0;
+    //         $newStatusLevel = $statusOrder[$validated['status']] ?? 0;
+
+    //         // **FIX 1: Prevent status downgrades**
+    //         // If the new status is 'sent' (1) but the current is 'delivered' (2), 'read' (3), or 'failed' (4), ignore it.
+    //         if ($newStatusLevel < $currentStatusLevel) {
+    //             Log::info("Ignoring stale status update for {$log->message_id}. Current: {$log->status}, New: {$validated['status']}");
+    //             return response()->json(['status' => 'ignored_stale_update']);
+    //         }
+            
+    //         // If we are here, the new status is valid.
+    //         $updateData = ['status' => $validated['status']];
+
+    //         switch ($validated['status']) {
+    //             case 'sent':
+    //                 if (!$log->sent_at) $updateData['sent_at'] = $validated['timestamp'];
+    //                 break;
+    //             case 'delivered':
+    //                 if (!$log->delivered_at) $updateData['delivered_at'] = $validated['timestamp'];
+    //                 break;
+    //             case 'read':
+    //                 if (!$log->read_at) $updateData['read_at'] = $validated['timestamp'];
+    //                 break;
+    //         }
+            
+    //         $log->update($updateData);
+    //         Log::info("Message status updated: {$log->message_id} to {$validated['status']}");
+
+    //         // **FIX 2: Prevent double-counting**
+    //         // Only process analytics if we haven't already.
+    //         if ($log->analytics_processed === false) {
+                
+    //             $incrementSent = false;
+    //             $incrementFailed = false;
+
+    //             if ($validated['status'] === 'sent') {
+    //                 $incrementSent = true;
+    //             } elseif ($validated['status'] === 'failed') {
+    //                 $incrementFailed = true;
+    //             }
+
+    //             if ($log->campaign_id) {
+    //                 $campaign = $log->campaign;
+    //                 if ($incrementSent) {
+    //                     $campaign->increment('sent_count');
+    //                     $log->update(['analytics_processed' => true]); // Mark as processed
+    //                 } elseif ($incrementFailed) {
+    //                     $campaign->increment('failed_count');
+    //                     $log->update(['analytics_processed' => true]); // Mark as processed
+    //                 }
+    //             } elseif ($log->scheduled_message_id) {
+    //                 $scheduledMessage = $log->scheduledMessage;
+    //                 if ($incrementSent) {
+    //                     $scheduledMessage->increment('sent_count');
+    //                     $log->update(['analytics_processed' => true]);
+    //                 } elseif ($incrementFailed) {
+    //                     $scheduledMessage->increment('failed_count');
+    //                     $log->update(['analytics_processed' => true]);
+    //                 }
+    //             }
+    //         }
+
+    //         // Auto-responder log (your existing logic is fine)
+    //         if ($log->auto_responder_log_id) {
+    //             \App\Models\AutoResponderLog::find($log->auto_responder_log_id)
+    //                 ?->update(['status' => $validated['status']]);
+    //         }
+    //     }
+
+    //     return response()->json(['status' => 'ok']);
+    // }
 
     /**
      * Helper function to send a reply via the gateway.
@@ -322,14 +403,51 @@ class WebhookController extends Controller
         $log = MessageLog::where('message_id', $validated['tempMessageId'])->first();
 
         if ($log) {
+            // --- THIS IS THE FIX ---
+            // 1. Update the ID and set status to 'sent'
             $log->update([
-                'message_id' => $validated['finalMessageId'], // Update to the real ID
+                'message_id' => $validated['finalMessageId'],
+                'status' => 'sent',
+                'sent_at' => now(),
             ]);
-            Log::info("Final message ID updated for log: {$log->id}");
+
+            // 2. Process analytics *here*, where we are 100% sure
+            if ($log->analytics_processed === false) {
+                
+                if ($log->campaign_id) {
+                    $log->campaign?->increment('sent_count');
+                    $log->update(['analytics_processed' => true]);
+                
+                } elseif ($log->scheduled_message_id) {
+                    $log->scheduledMessage?->increment('sent_count');
+                    $log->update(['analytics_processed' => true]);
+                }
+            }
+            
+            Log::info("Final message ID updated and marked as 'sent' for log: {$log->id}");
         }
 
         return response()->json(['status' => 'success']);
     }
+    // public function handleMessageSent(Request $request)
+    // {
+    //     $validated = $request->validate([
+    //         'tempMessageId' => 'required|string|exists:message_logs,message_id',
+    //         'finalMessageId' => 'required|string',
+    //         'sessionId' => 'required|string',
+    //     ]);
+
+    //     $log = MessageLog::where('message_id', $validated['tempMessageId'])->first();
+
+    //     if ($log) {
+    //         $log->update([
+    //             'message_id' => $validated['finalMessageId'], // Update to the real ID
+    //         ]);
+    //         Log::info("Final message ID updated for log: {$log->id}");
+    //     }
+
+    //     return response()->json(['status' => 'success']);
+    // }
 
     /**
      * NEW: Handle immediate send failures from the gateway.

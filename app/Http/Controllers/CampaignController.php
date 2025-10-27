@@ -14,15 +14,6 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class CampaignController extends Controller
 {
-
-    public function create()
-    {
-        return Inertia::render('Campaigns/Create', [
-            'devices' => auth()->user()->whatsappDevices()->where('status', 'connected')->get(),
-            'campaigns' => auth()->user()->campaigns()->latest()->get(),
-        ]);
-    }
-
     public function index()
     {
         $campaigns = auth()->user()->campaigns()
@@ -32,6 +23,14 @@ class CampaignController extends Controller
 
         return Inertia::render('Campaigns/Index', [
             'campaigns' => $campaigns,
+        ]);
+    }
+
+    public function create()
+    {
+        return Inertia::render('Campaigns/Create', [
+            'devices' => auth()->user()->whatsappDevices()->where('status', 'connected')->get(),
+            // 'campaigns' => auth()->user()->campaigns()->latest()->get(),
         ]);
     }
 

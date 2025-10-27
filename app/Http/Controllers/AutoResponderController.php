@@ -15,6 +15,11 @@ class AutoResponderController extends Controller
         ]);
     }
 
+    public function create()
+    {
+        return Inertia::render('AutoResponders/Create');
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([

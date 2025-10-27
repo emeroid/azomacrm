@@ -122,10 +122,13 @@ Route::prefix('webhook')->group(function () {
     Route::post('/message-failed', [WebhookController::class, 'handleMessageFailed']);
 });
 
-Route::prefix('auto-responder')->group(function () {
+Route::prefix('auto-responders')->group(function () {
     Route::get('/', [AutoResponderController::class, 'index'])->name('auto-responders.index');
     Route::post('/store', [AutoResponderController::class, 'store'])->name('auto-responders.store');
     Route::delete('/delete', [AutoResponderController::class, 'destroy'])->name('auto-responders.delete');
+    Route::get('/create', [AutoResponderController::class, 'create'])->name('auto-responders.create');
+    Route::patch('/{autoResponder}/status', [AutoResponderController::class, 'updateStatus'])->name('auto-responders.update-status');
+
 });
 
 Route::prefix('schedulers')->group(function () {

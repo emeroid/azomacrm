@@ -22,6 +22,7 @@ class MessageLog extends Model
         'delivered_at',
         'read_at',
         'failure_reason',
+        'analytics_processed',
 
         // --- NEW FOREIGN KEYS for Analytics ---
         'user_id',                   // Needed for general analytics access
@@ -30,6 +31,10 @@ class MessageLog extends Model
         'auto_responder_log_id',     // Links back to AutoResponderLog (null if from Schedule/Campaign)
     ];
 
+    protected $casts = [
+        'analytics_processed' => 'boolean',
+    ];
+    
     public function scheduledMessage()
     {
         return $this->belongsTo(ScheduledMessage::class);

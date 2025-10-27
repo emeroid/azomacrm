@@ -5,7 +5,9 @@ import AuthenticatedLayout from '@/Layouts/WaAuthLayout';
 
 export default function CreateCampaign({ auth, devices, recentCampaigns }) {
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [showSpintaxHelp, setShowSpintaxHelp] = useState(false);
     const [mediaPreview, setMediaPreview] = useState(null);
+    const [spintaxPreview, setSpintaxPreview] = useState('');
     const fileInputRef = useRef(null);
     const textareaRef = useRef(null);
 
@@ -16,6 +18,8 @@ export default function CreateCampaign({ auth, devices, recentCampaigns }) {
         contacts_file: null,
         message: '',
         media_file: null,
+        use_spintax: false,
+        spintax_variations: 3,
     });
 
     function handleSubmit(e) {
@@ -45,6 +49,26 @@ export default function CreateCampaign({ auth, devices, recentCampaigns }) {
         }
     ];
 
+    // Spintax examples
+    const spintaxExamples = [
+        {
+            pattern: '{Hello|Hi|Hey} {there|friend|customer}',
+            description: 'Greeting variations'
+        },
+        {
+            pattern: 'I {hope|wish} you are doing {great|well|amazing}',
+            description: 'Well-being check'
+        },
+        {
+            pattern: 'Check out our {new|latest|amazing} {products|offers|deals}',
+            description: 'Promotional message'
+        },
+        {
+            pattern: '{Thank you|Thanks} for {your support|being a customer|choosing us}',
+            description: 'Appreciation message'
+        }
+    ];
+
     const insertEmoji = (emoji) => {
         const textarea = textareaRef.current;
         const start = textarea.selectionStart;
@@ -54,11 +78,44 @@ export default function CreateCampaign({ auth, devices, recentCampaigns }) {
         setData('message', newMessage);
         setShowEmojiPicker(false);
         
-        // Focus back to textarea and set cursor position
         setTimeout(() => {
             textarea.focus();
             textarea.setSelectionRange(start + emoji.length, start + emoji.length);
         }, 0);
+    };
+
+    const insertSpintax = (pattern) => {
+        const textarea = textareaRef.current;
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const newMessage = data.message.substring(0, start) + pattern + data.message.substring(end);
+        
+        setData('message', newMessage);
+        
+        setTimeout(() => {
+            textarea.focus();
+            textarea.setSelectionRange(start + pattern.length, start + pattern.length);
+        }, 0);
+    };
+
+    const generateSpintaxPreview = () => {
+        if (!data.use_spintax || !data.message) {
+            setSpintaxPreview('');
+            return;
+        }
+
+        // Simple spintax preview generation (for demonstration)
+        // In a real implementation, this would use the same parser as the backend
+        const previews = [];
+        for (let i = 0; i < 3; i++) {
+            let preview = data.message
+                .replace(/{([^}]+)}/g, (match, options) => {
+                    const variations = options.split('|');
+                    return variations[Math.floor(Math.random() * variations.length)];
+                });
+            previews.push(preview);
+        }
+        setSpintaxPreview(previews.join('\n\n---\n\n'));
     };
 
     const handleMediaChange = (e) => {
@@ -66,7 +123,6 @@ export default function CreateCampaign({ auth, devices, recentCampaigns }) {
         if (file) {
             setData('media_file', file);
             
-            // Create preview
             const reader = new FileReader();
             reader.onload = (e) => {
                 setMediaPreview({
@@ -282,6 +338,132 @@ export default function CreateCampaign({ auth, devices, recentCampaigns }) {
                                         )}
                                     </div>
 
+                                    {/* Spintax Configuration */}
+                                    <div className="bg-purple-50 border border-purple-200 rounded-2xl p-6">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h4 className="font-semibold text-purple-900 flex items-center space-x-2">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                                </svg>
+                                                <span>Message Variations (Anti-Ban Protection)</span>
+                                            </h4>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowSpintaxHelp(!showSpintaxHelp)}
+                                                className="text-purple-600 hover:text-purple-800 text-sm font-medium flex items-center space-x-1"
+                                            >
+                                                <span>?</span>
+                                                <span>Help</span>
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="space-y-4">
+                                            <label className="flex items-center space-x-3 cursor-pointer">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={data.use_spintax}
+                                                    onChange={(e) => setData('use_spintax', e.target.checked)}
+                                                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                                />
+                                                <span className="text-sm font-medium text-gray-700">Enable Spintax for message variations</span>
+                                            </label>
+                                            
+                                            {data.use_spintax && (
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <label htmlFor="spintax_variations" className="block text-sm font-medium text-gray-700 mb-2">
+                                                            Number of Variations
+                                                        </label>
+                                                        <select
+                                                            id="spintax_variations"
+                                                            value={data.spintax_variations}
+                                                            onChange={(e) => setData('spintax_variations', e.target.value)}
+                                                            className="block w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                                                        >
+                                                            <option value="2">2 variations</option>
+                                                            <option value="3">3 variations</option>
+                                                            <option value="5">5 variations</option>
+                                                            <option value="10">10 variations</option>
+                                                        </select>
+                                                        <p className="text-gray-500 text-xs mt-2">
+                                                            More variations = better protection against spam detection
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Spintax Examples */}
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                            Quick Spintax Templates
+                                                        </label>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                            {spintaxExamples.map((example, index) => (
+                                                                <button
+                                                                    key={index}
+                                                                    type="button"
+                                                                    onClick={() => insertSpintax(example.pattern)}
+                                                                    className="text-left p-3 border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors"
+                                                                >
+                                                                    <code className="text-sm text-purple-700 font-mono block mb-1">
+                                                                        {example.pattern}
+                                                                    </code>
+                                                                    <span className="text-xs text-gray-500">{example.description}</span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Spintax Preview */}
+                                                    <div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={generateSpintaxPreview}
+                                                            className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors mb-2"
+                                                        >
+                                                            Generate Preview
+                                                        </button>
+                                                        {spintaxPreview && (
+                                                            <div className="border border-gray-200 rounded-lg p-4 bg-white">
+                                                                <h5 className="font-medium text-gray-700 mb-2">Message Variations Preview:</h5>
+                                                                <div className="space-y-3 text-sm text-gray-600">
+                                                                    {spintaxPreview.split('\n\n---\n\n').map((preview, index) => (
+                                                                        <div key={index} className="p-3 bg-gray-50 rounded border-l-4 border-purple-400">
+                                                                            <strong>Variation {index + 1}:</strong> {preview}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Spintax Help */}
+                                        {showSpintaxHelp && (
+                                            <div className="mt-4 p-4 bg-white border border-purple-200 rounded-lg">
+                                                <h5 className="font-semibold text-purple-900 mb-2">How Spintax Works:</h5>
+                                                <ul className="text-sm text-gray-600 space-y-2">
+                                                    <li className="flex items-start space-x-2">
+                                                        <span className="text-purple-600 mt-0.5">•</span>
+                                                        <span>Use <code className="bg-purple-100 px-1 rounded">{"{option1|option2|option3}"}</code> to create variations</span>
+                                                    </li>
+                                                    <li className="flex items-start space-x-2">
+                                                        <span className="text-purple-600 mt-0.5">•</span>
+                                                        <span>Each recipient gets a randomly selected variation</span>
+                                                    </li>
+                                                    <li className="flex items-start space-x-2">
+                                                        <span className="text-purple-600 mt-0.5">•</span>
+                                                        <span>Helps avoid spam detection by making messages unique</span>
+                                                    </li>
+                                                    <li className="flex items-start space-x-2">
+                                                        <span className="text-purple-600 mt-0.5">•</span>
+                                                        <span>Example: <code>{"Hello {there|friend|customer}"}</code> becomes "Hello there", "Hello friend", or "Hello customer"</span>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     {/* Message Composition with Emoji Picker */}
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
@@ -341,11 +523,16 @@ export default function CreateCampaign({ auth, devices, recentCampaigns }) {
                                             onChange={(e) => setData('message', e.target.value)} 
                                             className="block w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors" 
                                             rows="8" 
-                                            placeholder="Hello! This is a broadcast message from our company..."
+                                            placeholder={`Write your message here. ${data.use_spintax ? 'Use {option1|option2} for variations.' : 'Use emojis to make it engaging!'}`}
                                         ></textarea>
                                         {errors.message && <p className="text-red-600 text-sm mt-2">{errors.message}</p>}
                                         <div className="flex justify-between items-center mt-2">
-                                            <p className="text-gray-500 text-xs">Write your message in a friendly, engaging tone</p>
+                                            <p className="text-gray-500 text-xs">
+                                                {data.use_spintax 
+                                                    ? 'Use spintax {like|this} to create message variations' 
+                                                    : 'Write your message in a friendly, engaging tone'
+                                                }
+                                            </p>
                                             <p className="text-gray-400 text-xs">{data.message.length} characters</p>
                                         </div>
                                     </div>
@@ -457,6 +644,18 @@ export default function CreateCampaign({ auth, devices, recentCampaigns }) {
                                                     {data.media_file ? 'Yes' : 'No'}
                                                 </span>
                                             </div>
+                                            {data.use_spintax && (
+                                                <>
+                                                    <div>
+                                                        <span className="text-blue-700">Spintax:</span>
+                                                        <span className="font-semibold text-blue-900 ml-2">Enabled</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-blue-700">Variations:</span>
+                                                        <span className="font-semibold text-blue-900 ml-2">{data.spintax_variations}</span>
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
 
@@ -546,28 +745,28 @@ export default function CreateCampaign({ auth, devices, recentCampaigns }) {
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                     </svg>
-                                    <span>Best Practices</span>
+                                    <span>Anti-Ban Tips</span>
                                 </h3>
                                 <ul className="space-y-2 text-sm text-yellow-800">
                                     <li className="flex items-start space-x-2">
                                         <span className="text-yellow-600 mt-0.5">•</span>
-                                        <span>Use emojis to make messages more engaging</span>
+                                        <span><strong>Use Spintax</strong> to create message variations</span>
                                     </li>
                                     <li className="flex items-start space-x-2">
                                         <span className="text-yellow-600 mt-0.5">•</span>
-                                        <span>Keep messages personal and relevant</span>
+                                        <span><strong>Limit recipients</strong> to 50-100 per hour</span>
                                     </li>
                                     <li className="flex items-start space-x-2">
                                         <span className="text-yellow-600 mt-0.5">•</span>
-                                        <span>Test with small groups first</span>
+                                        <span><strong>Avoid spam words</strong> like "free", "urgent", "winner"</span>
                                     </li>
                                     <li className="flex items-start space-x-2">
                                         <span className="text-yellow-600 mt-0.5">•</span>
-                                        <span>Include clear call-to-action</span>
+                                        <span><strong>Personalize messages</strong> with recipient names when possible</span>
                                     </li>
                                     <li className="flex items-start space-x-2">
                                         <span className="text-yellow-600 mt-0.5">•</span>
-                                        <span>Media files help increase engagement</span>
+                                        <span><strong>Use media</strong> to make messages more engaging</span>
                                     </li>
                                 </ul>
                             </div>

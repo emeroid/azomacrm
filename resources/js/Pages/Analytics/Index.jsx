@@ -288,7 +288,7 @@ export default function AnalyticsIndex({ auth, analyticsData }) {
                             <NavCard 
                                 title="Broadcast Campaigns"
                                 description="Create new broadcasts"
-                                href={route('campaigns.create')}
+                                href={route('campaigns.index')}
                                 color="border-purple-500"
                                 icon={icons.broadcast}
                             />

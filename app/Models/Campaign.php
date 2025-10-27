@@ -15,7 +15,7 @@ class Campaign extends Model
         'total_recipients', // Total recipients in the broadcast
         'sent_count',       // For analytics
         'failed_count',     // For analytics
-        'queued_at',
+        'queued_at'
     ];
 
     public function messageLogs()

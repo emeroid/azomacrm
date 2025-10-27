@@ -9,6 +9,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use App\Models\MessageLog;
+use App\Utils\SpintaxParser;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis; // **Import Redis**
 
@@ -18,7 +19,7 @@ class SendSingleWhatsappMessage implements ShouldQueue
 
     protected string $sessionId;
     protected string $phoneNumber;
-    protected string $message;
+    protected string $spintaxMessage;
     protected ?string $mediaUrl;
     protected int $userId;
     protected ?int $campaignId;
@@ -41,7 +42,7 @@ class SendSingleWhatsappMessage implements ShouldQueue
     {
         $this->sessionId = $sessionId;
         $this->phoneNumber = $phoneNumber;
-        $this->message = $message;
+        $this->spintaxMessage = $message;
         $this->mediaUrl = $mediaUrl;
         $this->userId = $userId;
         $this->campaignId = $campaignId;
@@ -71,15 +72,17 @@ class SendSingleWhatsappMessage implements ShouldQueue
             }
         }
 
-        // Create a log entry. The status is 'queued' because we are about to hand it off.
+        $finalMessage = SpintaxParser::parse($this->spintaxMessage);
+
+        // Create a log entry
         $log = MessageLog::create([
             'user_id' => $this->userId,
-            'message_id' => 'temp-' . \Illuminate\Support\Str::uuid(), // A temporary ID
+            'message_id' => 'temp-' . \Illuminate\Support\Str::uuid(),
             'session_id' => $this->sessionId,
             'recipient_number' => $this->phoneNumber,
-            'message' => $this->message,
-            'media_url' => $this->mediaUrl,
-            'status' => 'queued', // The job is queued for sending
+            'message' => $finalMessage, // **Log the final, parsed message**
+            'media_url' => $this->mediaUrl, // **Make sure media_url is $fillable in MessageLog**
+            'status' => 'queued',
             'sent_at' => null,
             'campaign_id' => $this->campaignId,
             'scheduled_message_id' => $this->scheduledMessageId,
@@ -91,15 +94,18 @@ class SendSingleWhatsappMessage implements ShouldQueue
             $payload = json_encode([
                 'sessionId' => $this->sessionId,
                 'to' => $this->phoneNumber,
-                'message' => $this->message,
+                'message' => $finalMessage, // **Send the final message**
                 'mediaUrl' => $this->mediaUrl,
-                'tempMessageId' => $log->message_id, // **Pass the temporary ID**
+                'tempMessageId' => $log->message_id,
             ]);
 
-            // Publish the job to the Redis Pub/Sub channel and finish.
-            // This is a "fire-and-forget" operation and is extremely fast.
-            Log::info('Attempting to publish to Redis. Payload: ' . $payload);
-            Redis::connection('pubsub')->publish('whatsapp:send_queue', $payload);
+            // Publish the job to the Redis list channel and finish.
+            $queueName = config('database.redis.queues.default', 'whatsapp:send_queue');
+            
+            Redis::connection('pubsub')->lpush('whatsapp:send_queue', $payload);
+            // Redis::lpush($queueName, $payload);
+
+            Log::info("Successfully pushed to Redis List [{$queueName}]. Payload: {$payload}");
 
         } catch (\Exception $e) {
             Log::error("Failed to publish message to Redis for {$this->phoneNumber}: " . $e->getMessage());
