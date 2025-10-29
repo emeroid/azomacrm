@@ -160,7 +160,7 @@ class WebhookController extends Controller
     
             $log = \App\Models\AutoResponderLog::create([
                 'auto_responder_id' => $foundResponder->id,
-                'recipient' => str_replace('@c.us', '', $validated['from']),
+                'recipient' => str_replace('@s.whatsapp.net', '', $validated['from']),
                 'sent_at' => now(),
                 'status' => 'attempted',
             ]);
@@ -347,7 +347,7 @@ class WebhookController extends Controller
     */
     private function sendAutoReply(string $sessionId, string $to, string $message, ?string $mediaUrl, ?int $autoResponderLogId = null): void
     {
-        $recipient = str_replace('@c.us', '', $to);
+        $recipient = str_replace('@s.whatsapp.net', '', $to);
         $device = WhatsappDevice::where('session_id', $sessionId)->first();
     
         if (!$device) {
