@@ -23,6 +23,8 @@ class ProcessScheduledMessages extends Command
 
         foreach ($messages as $message) {
             
+            $message->update(['sent_at' => now()]); 
+
             $device = $message->device;
             if (!$device) {
                 $this->error("No device found for scheduled message ID: {$message->id}");
@@ -73,8 +75,6 @@ class ProcessScheduledMessages extends Command
                 )->onQueue('whatsapp-broadcasts')->delay(now()->addSeconds($cumulativeDelay));
             }
 
-            // Mark the main schedule as sent
-            $message->update(['sent_at' => now()]);
             $this->info("All jobs for message ID: {$message->id} have been dispatched.");
         }
     }
